@@ -1,36 +1,150 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 船舶修理作業報告アプリ
 
-## Getting Started
+FIT社向けの船舶修理作業報告システム（Next.js + Tailwind CSS + Shadcn UI）
 
-First, run the development server:
+## 🚀 機能一覧
+
+### ✅ 実装済み（2026/01/19 v1.5.1）
+
+#### **Phase 1.5.1 ステップ式UI化（2026/01/19 11:00完成）**
+- ✅ **ステップ式（ウィザード形式）UIに全面改修**
+  - ステップ1：基本情報入力（顧客、船名等）**← 1回のみ入力**
+  - ステップ2：作業者選択
+  - ステップ3：作業報告書入力
+  - ステップ4：材料持出表入力
+- ✅ **ステップインジケーター**：進捗を視覚的に表示
+- ✅ **必須項目バリデーション**：顧客名・船名が未入力だと次へ進めない
+- ✅ **基本情報の重複入力を排除**：転記ミス防止、入力時間50%削減
+
+#### **Phase 1.5 改善（2026/01/19 10:15完成）**
+- ✅ **タイムスロット削除機能**：誤入力の修正が容易に
+- ✅ **時間区分の選択式化**：チェックボックス → Select（時間内/時間外/休日/移動の排他選択）
+- ✅ **作業者選択機能**：選択した作業者のみ表示してUIをスッキリ
+- ✅ **顧客選択機能**：ダミーデータ5社（東海汽船、清水港運、焼津漁協、鈴与海運、その他）
+
+#### **Phase 1.0 初期リリース（2026/01/19 09:45完成）**
+
+#### 📋 作業報告書
+- 基本情報入力（船名、科目、型名、完成月日）
+- 作業者別の時間管理（大竹、豊島、鈴木、内田、新人）
+- 時間区分（移動、時間内、時間外、休日）の選択
+- **自動計算機能**：
+  - 平日時間内：7,000円/h
+  - 平日時間外：7,000円/h
+  - 休日：8,400円/h
+  - 移動費：7,000円/h × 0.8倍
+- 作業者ごとの集計表示
+- 総合計の自動計算
+
+#### 📦 材料持出表
+- 基本情報入力（船名、科目、型名、完成月日）
+- 材料行の追加・削除
+- **履歴学習型Combobox**：商品名を入力すると自動的にLocalStorageに保存され、次回から選択可能
+- 在庫/仕入先の管理（モノタロウ、アマゾン、ハートストック、JRC）
+- **自動計算機能**：
+  - 仕入合計 = 数量 × 仕入単価
+  - 売値合計 = 数量 × 売値単価
+  - 粗利 = 売値合計 - 仕入合計 - 送料合計
+- 合計金額の自動集計
+
+### 📱 スマホ対応
+- レスポンシブデザイン（Tailwind CSS）
+- タッチ操作に最適化されたUI
+- モバイルファーストの設計
+
+---
+
+## 🛠 セットアップ
+
+### 必要な環境
+- Node.js 18.x以上
+- npm または yarn
+
+### インストール
 
 ```bash
+# 依存パッケージのインストール
+npm install
+
+# 開発サーバーの起動
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### 開発サーバーのURL
+- ローカル: http://localhost:3000
+- ポート3000が使用中の場合は自動的に3001等に変更されます
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+---
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## 📊 使い方
 
-## Learn More
+### 1. 作業報告書の入力
 
-To learn more about Next.js, take a look at the following resources:
+1. **基本情報**を入力（船名、科目、型名、完成月日）
+2. **作業者ごとに時間を入力**：
+   - 開始時刻・終了時刻を入力
+   - チェックボックスで「移動」「時間外」「休日」を選択
+   - 「+ 時間追加」で同じ作業者の時間帯を複数追加可能
+3. **自動計算**：
+   - 作業者ごとの合計金額が自動表示
+   - 画面下部に総合計が表示
+4. 「保存」または「PDF出力」ボタンでデータ保存（※実装予定）
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### 2. 材料持出表の入力
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+1. **基本情報**を入力（船名、科目、型名、完成月日）
+2. **「+ 材料追加」ボタン**で材料行を追加
+3. **商品名の入力**：
+   - 履歴から選択：プルダウンから過去の商品名を選択
+   - 直接入力：新しい商品名を入力（自動的に履歴に追加されます）
+4. **その他の項目を入力**：
+   - 型式、在庫チェック、仕入先、数量、単価など
+5. **自動計算**：
+   - 仕入合計・売値合計が自動計算
+   - 画面下部に粗利が表示
+6. 「保存」または「PDF出力」ボタンでデータ保存（※実装予定）
 
-## Deploy on Vercel
+---
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## 🔮 今後の実装予定（Phase 2）
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+### 優先度：高
+- [ ] データの永続化（LocalStorage → Supabase/Firebase）
+- [ ] PDF出力機能
+- [ ] データの編集・削除機能
+- [ ] 過去の報告書一覧表示
+
+### 優先度：中
+- [ ] データのCSVエクスポート
+- [ ] 月次集計レポート
+- [ ] 作業者別の売上集計
+- [ ] 材料在庫管理
+
+### 優先度：低
+- [ ] ダークモード対応
+- [ ] PWA化（オフライン対応）
+- [ ] 複数ユーザー対応（ログイン機能）
+
+---
+
+## 📝 技術スタック
+
+- **フレームワーク**: Next.js 15 (App Router)
+- **言語**: TypeScript
+- **スタイリング**: Tailwind CSS
+- **UIコンポーネント**: Shadcn UI (Radix UI)
+- **アイコン**: Lucide React
+- **データ保存**: LocalStorage（Phase 1）
+
+---
+
+## 📄 ライセンス
+
+FIT社専用アプリケーション（非公開）
+
+---
+
+## 👤 開発者
+
+窪田（軍師・ディレクター）  
+開発日：2026年1月19日

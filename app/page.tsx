@@ -1,65 +1,176 @@
-import Image from "next/image";
+"use client";
+
+import { useState } from "react";
+import { Button } from "@/components/ui/button";
+import BasicInfoStep from "@/components/steps/BasicInfoStep";
+import WorkerSelectionStep from "@/components/steps/WorkerSelectionStep";
+import WorkReportStep from "@/components/steps/WorkReportStep";
+import MaterialsStep from "@/components/steps/MaterialsStep";
+
+type BasicInfo = {
+  customer: string;
+  shipName: string;
+  category: string;
+  modelName: string;
+  completionDate: string;
+};
+
+type Worker = "大竹" | "豊島" | "鈴木" | "内田" | "新人";
 
 export default function Home() {
+  const [currentStep, setCurrentStep] = useState(1);
+  const [basicInfo, setBasicInfo] = useState<BasicInfo>({
+    customer: "",
+    shipName: "",
+    category: "",
+    modelName: "",
+    completionDate: "",
+  });
+  const [selectedWorkers, setSelectedWorkers] = useState<Worker[]>([]);
+
+  const totalSteps = 4;
+
+  const canProceed = () => {
+    switch (currentStep) {
+      case 1:
+        return basicInfo.customer && basicInfo.shipName;
+      case 2:
+        return selectedWorkers.length > 0;
+      case 3:
+        return true; // 作業報告は任意
+      case 4:
+        return true; // 材料持出も任意
+      default:
+        return false;
+    }
+  };
+
+  const nextStep = () => {
+    if (currentStep < totalSteps) {
+      setCurrentStep(currentStep + 1);
+    }
+  };
+
+  const prevStep = () => {
+    if (currentStep > 1) {
+      setCurrentStep(currentStep - 1);
+    }
+  };
+
+  const renderStep = () => {
+    switch (currentStep) {
+      case 1:
+        return <BasicInfoStep basicInfo={basicInfo} setBasicInfo={setBasicInfo} />;
+      case 2:
+        return (
+          <WorkerSelectionStep
+            selectedWorkers={selectedWorkers}
+            setSelectedWorkers={setSelectedWorkers}
+          />
+        );
+      case 3:
+        return (
+          <WorkReportStep
+            basicInfo={basicInfo}
+            selectedWorkers={selectedWorkers}
+          />
+        );
+      case 4:
+        return <MaterialsStep basicInfo={basicInfo} />;
+      default:
+        return null;
+    }
+  };
+
+  const getStepTitle = () => {
+    switch (currentStep) {
+      case 1:
+        return "基本情報の入力";
+      case 2:
+        return "作業者の選択";
+      case 3:
+        return "作業報告書の入力";
+      case 4:
+        return "材料持出表の入力";
+      default:
+        return "";
+    }
+  };
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <main className="min-h-screen bg-gray-50 p-4 md:p-8">
+      <div className="max-w-4xl mx-auto">
+        <h1 className="text-2xl md:text-3xl font-bold text-gray-900 mb-6">
+          船舶修理作業報告システム
+        </h1>
+
+        {/* ステップインジケーター */}
+        <div className="mb-8">
+          <div className="flex items-center justify-between mb-2">
+            {[1, 2, 3, 4].map((step) => (
+              <div key={step} className="flex items-center flex-1">
+                <div
+                  className={`
+                    w-10 h-10 rounded-full flex items-center justify-center font-semibold
+                    ${
+                      step === currentStep
+                        ? "bg-blue-600 text-white"
+                        : step < currentStep
+                        ? "bg-green-600 text-white"
+                        : "bg-gray-300 text-gray-600"
+                    }
+                  `}
+                >
+                  {step < currentStep ? "✓" : step}
+                </div>
+                {step < 4 && (
+                  <div
+                    className={`flex-1 h-1 mx-2 ${
+                      step < currentStep ? "bg-green-600" : "bg-gray-300"
+                    }`}
+                  />
+                )}
+              </div>
+            ))}
+          </div>
+          <div className="text-center text-sm text-gray-600">
+            ステップ {currentStep} / {totalSteps}: {getStepTitle()}
+          </div>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+
+        {/* コンテンツ */}
+        <div className="bg-white rounded-lg shadow-md p-6 mb-6">
+          {renderStep()}
         </div>
-      </main>
-    </div>
+
+        {/* ナビゲーションボタン */}
+        <div className="flex gap-4">
+          <Button
+            onClick={prevStep}
+            disabled={currentStep === 1}
+            variant="outline"
+            className="flex-1"
+          >
+            ← 戻る
+          </Button>
+          {currentStep < totalSteps ? (
+            <Button
+              onClick={nextStep}
+              disabled={!canProceed()}
+              className="flex-1"
+            >
+              次へ →
+            </Button>
+          ) : (
+            <Button
+              className="flex-1"
+              onClick={() => alert("保存機能は実装予定です")}
+            >
+              保存して完了
+            </Button>
+          )}
+        </div>
+      </div>
+    </main>
   );
 }
