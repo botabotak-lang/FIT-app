@@ -80,21 +80,27 @@ export default function MaterialsStep({ basicInfo }: Props) {
     setMaterials(materials.filter((m) => m.id !== id));
   };
 
-  const updateMaterial = (id: string, field: keyof Material, value: any) => {
+  const updateMaterial = (id: string, field: keyof Material, value: string | number | boolean) => {
     setMaterials(
       materials.map((m) => {
         if (m.id !== id) return m;
 
-        const updated = { ...m, [field]: value };
-
-        if (field === "quantity" || field === "purchasePrice") {
-          updated.purchaseTotal = updated.quantity * updated.purchasePrice;
-        }
-        if (field === "quantity" || field === "sellingPrice") {
-          updated.sellingTotal = updated.quantity * updated.sellingPrice;
+        // 数値フィールドの処理
+        let updatedValue = value;
+        if (["quantity", "purchasePrice", "sellingPrice", "shippingFee"].includes(field)) {
+          // 入力が空の場合は0として扱うが、表示上は空を許容するための処理はInput側で行う
+          updatedValue = value === "" ? 0 : Number(value);
         }
 
-        if (field === "productName" && value) {
+        const updated = { ...m, [field]: updatedValue };
+
+        // 自動計算
+        if (field === "quantity" || field === "purchasePrice" || field === "sellingPrice") {
+          updated.purchaseTotal = Number(updated.quantity) * Number(updated.purchasePrice);
+          updated.sellingTotal = Number(updated.quantity) * Number(updated.sellingPrice);
+        }
+
+        if (field === "productName" && typeof value === "string" && value) {
           addToHistory(value);
         }
 
@@ -201,8 +207,9 @@ export default function MaterialsStep({ basicInfo }: Props) {
                 <Label className="text-xs">数量</Label>
                 <Input
                   type="number"
-                  value={material.quantity}
-                  onChange={(e) => updateMaterial(material.id, "quantity", Number(e.target.value))}
+                  value={material.quantity || ""}
+                  onChange={(e) => updateMaterial(material.id, "quantity", e.target.value)}
+                  onFocus={(e) => e.target.select()}
                   min="0"
                 />
               </div>
@@ -211,8 +218,9 @@ export default function MaterialsStep({ basicInfo }: Props) {
                 <Label className="text-xs">仕入単価</Label>
                 <Input
                   type="number"
-                  value={material.purchasePrice}
-                  onChange={(e) => updateMaterial(material.id, "purchasePrice", Number(e.target.value))}
+                  value={material.purchasePrice || ""}
+                  onChange={(e) => updateMaterial(material.id, "purchasePrice", e.target.value)}
+                  onFocus={(e) => e.target.select()}
                   min="0"
                 />
               </div>
@@ -226,8 +234,9 @@ export default function MaterialsStep({ basicInfo }: Props) {
                 <Label className="text-xs">売値単価</Label>
                 <Input
                   type="number"
-                  value={material.sellingPrice}
-                  onChange={(e) => updateMaterial(material.id, "sellingPrice", Number(e.target.value))}
+                  value={material.sellingPrice || ""}
+                  onChange={(e) => updateMaterial(material.id, "sellingPrice", e.target.value)}
+                  onFocus={(e) => e.target.select()}
                   min="0"
                 />
               </div>
@@ -241,8 +250,9 @@ export default function MaterialsStep({ basicInfo }: Props) {
                 <Label className="text-xs">送料</Label>
                 <Input
                   type="number"
-                  value={material.shippingFee}
-                  onChange={(e) => updateMaterial(material.id, "shippingFee", Number(e.target.value))}
+                  value={material.shippingFee || ""}
+                  onChange={(e) => updateMaterial(material.id, "shippingFee", e.target.value)}
+                  onFocus={(e) => e.target.select()}
                   min="0"
                 />
               </div>
