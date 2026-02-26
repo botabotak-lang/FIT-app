@@ -1,134 +1,91 @@
 "use client";
 
-import { useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { X } from "lucide-react";
-
-type Worker = "大竹" | "豊島" | "鈴木" | "内田" | "新人";
-type TimeCategory = "regular" | "overtime" | "holiday" | "travel";
-
-type TimeSlot = {
-  startTime: string;
-  endTime: string;
-  category: TimeCategory;
-};
-
-type WorkerTime = {
-  [key in Worker]: TimeSlot[];
-};
-
-type BasicInfo = {
-  customer: string;
-  shipName: string;
-  category: string;
-  modelName: string;
-  completionDate: string;
-};
-
-const REGULAR_RATE = 7000;
-const HOLIDAY_RATE = 8400;
-const TRAVEL_RATE = 0.8;
-
-const TIME_CATEGORY_LABELS: { [key in TimeCategory]: string } = {
-  regular: "時間内",
-  overtime: "時間外",
-  holiday: "休日",
-  travel: "移動",
-};
+import {
+  BasicInfo,
+  Worker,
+  TimeSlot,
+  TimeCategory,
+  WorkerTimes,
+  REGULAR_RATE,
+  HOLIDAY_RATE,
+  TRAVEL_RATE,
+  TIME_CATEGORY_LABELS,
+} from "@/lib/types";
 
 type Props = {
   basicInfo: BasicInfo;
   selectedWorkers: Worker[];
+  workerTimes: WorkerTimes;
+  onWorkerTimesChange: (times: WorkerTimes) => void;
 };
 
-export default function WorkReportStep({ basicInfo, selectedWorkers }: Props) {
-  const [workerTimes, setWorkerTimes] = useState<WorkerTime>(() => {
-    const initial: Partial<WorkerTime> = {};
-    selectedWorkers.forEach((worker) => {
-      initial[worker] = [{ startTime: "", endTime: "", category: "regular" }];
-    });
-    return initial as WorkerTime;
-  });
-
+export default function WorkReportStep({ basicInfo, selectedWorkers, workerTimes, onWorkerTimesChange }: Props) {
   const calculateHours = (start: string, end: string): number => {
     if (!start || !end) return 0;
     const [startHour, startMin] = start.split(":").map(Number);
     const [endHour, endMin] = end.split(":").map(Number);
-    const startMinutes = startHour * 60 + startMin;
-    const endMinutes = endHour * 60 + endMin;
-    return (endMinutes - startMinutes) / 60;
+    return (endHour * 60 + endMin - (startHour * 60 + startMin)) / 60;
   };
 
   const calculateWorkerStats = (worker: Worker) => {
     const slots = workerTimes[worker] || [];
-    let travelHours = 0;
-    let regularHours = 0;
-    let overtimeHours = 0;
-    let holidayHours = 0;
+    let travelHours = 0, regularHours = 0, overtimeHours = 0, holidayHours = 0;
 
     slots.forEach((slot) => {
       const hours = calculateHours(slot.startTime, slot.endTime);
       switch (slot.category) {
-        case "travel":
-          travelHours += hours;
-          break;
-        case "overtime":
-          overtimeHours += hours;
-          break;
-        case "holiday":
-          holidayHours += hours;
-          break;
-        case "regular":
-        default:
-          regularHours += hours;
-          break;
+        case "travel": travelHours += hours; break;
+        case "overtime": overtimeHours += hours; break;
+        case "holiday": holidayHours += hours; break;
+        default: regularHours += hours; break;
       }
     });
 
-    const travelCost = travelHours * REGULAR_RATE * TRAVEL_RATE;
-    const regularCost = regularHours * REGULAR_RATE;
-    const overtimeCost = overtimeHours * REGULAR_RATE;
-    const holidayCost = holidayHours * HOLIDAY_RATE;
-    const totalCost = travelCost + regularCost + overtimeCost + holidayCost;
-
     return {
-      travelHours: travelHours.toFixed(2),
-      regularHours: regularHours.toFixed(2),
-      overtimeHours: overtimeHours.toFixed(2),
-      holidayHours: holidayHours.toFixed(2),
-      totalCost: Math.round(totalCost),
+      travelHours, regularHours, overtimeHours, holidayHours,
+      travelCost: Math.round(travelHours * REGULAR_RATE * TRAVEL_RATE),
+      regularCost: Math.round(regularHours * REGULAR_RATE),
+      overtimeCost: Math.round(overtimeHours * REGULAR_RATE),
+      holidayCost: Math.round(holidayHours * HOLIDAY_RATE),
+      totalCost: Math.round(
+        travelHours * REGULAR_RATE * TRAVEL_RATE +
+        regularHours * REGULAR_RATE +
+        overtimeHours * REGULAR_RATE +
+        holidayHours * HOLIDAY_RATE
+      ),
     };
   };
 
   const calculateTotal = () => {
-    return selectedWorkers.reduce((acc, worker) => {
-      const stats = calculateWorkerStats(worker);
-      return acc + stats.totalCost;
-    }, 0);
+    return selectedWorkers.reduce((acc, w) => acc + calculateWorkerStats(w).totalCost, 0);
   };
 
   const addTimeSlot = (worker: Worker) => {
-    setWorkerTimes((prev) => ({
-      ...prev,
-      [worker]: [...(prev[worker] || []), { startTime: "", endTime: "", category: "regular" }],
-    }));
+    onWorkerTimesChange({
+      ...workerTimes,
+      [worker]: [...(workerTimes[worker] || []), { startTime: "", endTime: "", category: "regular" as TimeCategory }],
+    });
   };
 
   const removeTimeSlot = (worker: Worker, index: number) => {
-    setWorkerTimes((prev) => ({
-      ...prev,
-      [worker]: (prev[worker] || []).filter((_, i) => i !== index),
-    }));
+    onWorkerTimesChange({
+      ...workerTimes,
+      [worker]: (workerTimes[worker] || []).filter((_, i) => i !== index),
+    });
   };
 
-  const updateTimeSlot = (worker: Worker, index: number, field: keyof TimeSlot, value: any) => {
-    setWorkerTimes((prev) => ({
-      ...prev,
-      [worker]: (prev[worker] || []).map((slot, i) => (i === index ? { ...slot, [field]: value } : slot)),
-    }));
+  const updateTimeSlot = (worker: Worker, index: number, field: keyof TimeSlot, value: string) => {
+    onWorkerTimesChange({
+      ...workerTimes,
+      [worker]: (workerTimes[worker] || []).map((slot, i) =>
+        i === index ? { ...slot, [field]: value } : slot
+      ),
+    });
   };
 
   return (
@@ -161,7 +118,6 @@ export default function WorkReportStep({ basicInfo, selectedWorkers }: Props) {
                   <X className="w-4 h-4" />
                 </button>
               )}
-
               <div>
                 <Label className="text-xs">開始時刻</Label>
                 <Input
@@ -182,16 +138,14 @@ export default function WorkReportStep({ basicInfo, selectedWorkers }: Props) {
                 <Label className="text-xs">時間区分</Label>
                 <Select
                   value={slot.category}
-                  onValueChange={(value) => updateTimeSlot(worker, index, "category", value as TimeCategory)}
+                  onValueChange={(value) => updateTimeSlot(worker, index, "category", value)}
                 >
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
                     {Object.entries(TIME_CATEGORY_LABELS).map(([key, label]) => (
-                      <SelectItem key={key} value={key}>
-                        {label}
-                      </SelectItem>
+                      <SelectItem key={key} value={key}>{label}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -201,16 +155,16 @@ export default function WorkReportStep({ basicInfo, selectedWorkers }: Props) {
 
           <div className="bg-blue-50 p-3 rounded text-sm space-y-1">
             {(() => {
-              const stats = calculateWorkerStats(worker);
+              const s = calculateWorkerStats(worker);
               return (
                 <>
                   <div className="flex justify-between">
-                    <span>移動: {stats.travelHours}h</span>
-                    <span>時間内: {stats.regularHours}h</span>
-                    <span>時間外: {stats.overtimeHours}h</span>
-                    <span>休日: {stats.holidayHours}h</span>
+                    <span>移動: {s.travelHours.toFixed(1)}h</span>
+                    <span>時間内: {s.regularHours.toFixed(1)}h</span>
+                    <span>時間外: {s.overtimeHours.toFixed(1)}h</span>
+                    <span>休日: {s.holidayHours.toFixed(1)}h</span>
                   </div>
-                  <div className="font-semibold text-right">合計: ¥{stats.totalCost.toLocaleString()}</div>
+                  <div className="font-semibold text-right">合計: ¥{s.totalCost.toLocaleString()}</div>
                 </>
               );
             })()}

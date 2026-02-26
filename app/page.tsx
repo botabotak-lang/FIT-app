@@ -1,21 +1,23 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import BasicInfoStep from "@/components/steps/BasicInfoStep";
 import WorkerSelectionStep from "@/components/steps/WorkerSelectionStep";
 import WorkReportStep from "@/components/steps/WorkReportStep";
 import MaterialsStep from "@/components/steps/MaterialsStep";
+import InvoicePreviewStep from "@/components/steps/InvoicePreviewStep";
+import { BasicInfo, Worker, WorkerTimes, Material, TimeCategory } from "@/lib/types";
 
-type BasicInfo = {
-  customer: string;
-  shipName: string;
-  category: string;
-  modelName: string;
-  completionDate: string;
-};
+const TOTAL_STEPS = 5;
 
-type Worker = "大竹" | "豊島" | "鈴木" | "内田" | "新人";
+const STEP_TITLES = [
+  "基本情報の入力",
+  "作業者の選択",
+  "作業報告書の入力",
+  "材料持出表の入力",
+  "見積書・請求書の確認",
+];
 
 export default function Home() {
   const [currentStep, setCurrentStep] = useState(1);
@@ -27,34 +29,37 @@ export default function Home() {
     completionDate: "",
   });
   const [selectedWorkers, setSelectedWorkers] = useState<Worker[]>([]);
+  const [workerTimes, setWorkerTimes] = useState<WorkerTimes>({});
+  const [materials, setMaterials] = useState<Material[]>([]);
 
-  const totalSteps = 4;
+  useEffect(() => {
+    selectedWorkers.forEach((worker) => {
+      if (!workerTimes[worker] || workerTimes[worker]!.length === 0) {
+        setWorkerTimes((prev) => ({
+          ...prev,
+          [worker]: [{ startTime: "", endTime: "", category: "regular" as TimeCategory }],
+        }));
+      }
+    });
+  }, [selectedWorkers]);
 
   const canProceed = () => {
     switch (currentStep) {
-      case 1:
-        return basicInfo.customer && basicInfo.shipName;
-      case 2:
-        return selectedWorkers.length > 0;
-      case 3:
-        return true; // 作業報告は任意
-      case 4:
-        return true; // 材料持出も任意
-      default:
-        return false;
+      case 1: return basicInfo.customer && basicInfo.shipName;
+      case 2: return selectedWorkers.length > 0;
+      case 3: return true;
+      case 4: return true;
+      case 5: return true;
+      default: return false;
     }
   };
 
   const nextStep = () => {
-    if (currentStep < totalSteps) {
-      setCurrentStep(currentStep + 1);
-    }
+    if (currentStep < TOTAL_STEPS) setCurrentStep(currentStep + 1);
   };
 
   const prevStep = () => {
-    if (currentStep > 1) {
-      setCurrentStep(currentStep - 1);
-    }
+    if (currentStep > 1) setCurrentStep(currentStep - 1);
   };
 
   const renderStep = () => {
@@ -73,27 +78,29 @@ export default function Home() {
           <WorkReportStep
             basicInfo={basicInfo}
             selectedWorkers={selectedWorkers}
+            workerTimes={workerTimes}
+            onWorkerTimesChange={setWorkerTimes}
           />
         );
       case 4:
-        return <MaterialsStep basicInfo={basicInfo} />;
+        return (
+          <MaterialsStep
+            basicInfo={basicInfo}
+            materials={materials}
+            onMaterialsChange={setMaterials}
+          />
+        );
+      case 5:
+        return (
+          <InvoicePreviewStep
+            basicInfo={basicInfo}
+            selectedWorkers={selectedWorkers}
+            workerTimes={workerTimes}
+            materials={materials}
+          />
+        );
       default:
         return null;
-    }
-  };
-
-  const getStepTitle = () => {
-    switch (currentStep) {
-      case 1:
-        return "基本情報の入力";
-      case 2:
-        return "作業者の選択";
-      case 3:
-        return "作業報告書の入力";
-      case 4:
-        return "材料持出表の入力";
-      default:
-        return "";
     }
   };
 
@@ -107,11 +114,11 @@ export default function Home() {
         {/* ステップインジケーター */}
         <div className="mb-8">
           <div className="flex items-center justify-between mb-2">
-            {[1, 2, 3, 4].map((step) => (
+            {Array.from({ length: TOTAL_STEPS }, (_, i) => i + 1).map((step) => (
               <div key={step} className="flex items-center flex-1">
                 <div
                   className={`
-                    w-10 h-10 rounded-full flex items-center justify-center font-semibold
+                    w-8 h-8 md:w-10 md:h-10 rounded-full flex items-center justify-center font-semibold text-sm md:text-base
                     ${
                       step === currentStep
                         ? "bg-blue-600 text-white"
@@ -123,9 +130,9 @@ export default function Home() {
                 >
                   {step < currentStep ? "✓" : step}
                 </div>
-                {step < 4 && (
+                {step < TOTAL_STEPS && (
                   <div
-                    className={`flex-1 h-1 mx-2 ${
+                    className={`flex-1 h-1 mx-1 md:mx-2 ${
                       step < currentStep ? "bg-green-600" : "bg-gray-300"
                     }`}
                   />
@@ -134,7 +141,7 @@ export default function Home() {
             ))}
           </div>
           <div className="text-center text-sm text-gray-600">
-            ステップ {currentStep} / {totalSteps}: {getStepTitle()}
+            ステップ {currentStep} / {TOTAL_STEPS}: {STEP_TITLES[currentStep - 1]}
           </div>
         </div>
 
@@ -153,7 +160,7 @@ export default function Home() {
           >
             ← 戻る
           </Button>
-          {currentStep < totalSteps ? (
+          {currentStep < TOTAL_STEPS ? (
             <Button
               onClick={nextStep}
               disabled={!canProceed()}
@@ -163,8 +170,8 @@ export default function Home() {
             </Button>
           ) : (
             <Button
-              className="flex-1"
-              onClick={() => alert("保存機能は実装予定です")}
+              className="flex-1 bg-green-600 hover:bg-green-700"
+              onClick={() => alert("データの保存機能はPhase 2で実装予定です")}
             >
               保存して完了
             </Button>

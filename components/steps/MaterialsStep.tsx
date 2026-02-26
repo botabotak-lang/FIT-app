@@ -4,50 +4,24 @@ import { useState, useEffect } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Check, ChevronsUpDown, X } from "lucide-react";
-import { cn } from "@/lib/utils";
-
-type BasicInfo = {
-  customer: string;
-  shipName: string;
-  category: string;
-  modelName: string;
-  completionDate: string;
-};
-
-type Material = {
-  id: string;
-  date: string;
-  productName: string;
-  modelType: string;
-  isStock: boolean;
-  supplier: string;
-  quantity: number;
-  purchasePrice: number;
-  purchaseTotal: number;
-  sellingPrice: number;
-  sellingTotal: number;
-  shippingFee: number;
-  carrier: string;
-};
-
-const SUPPLIERS = ["モノタロウ", "アマゾン", "ハートストック", "JRC", "その他"];
+import { X } from "lucide-react";
+import { BasicInfo, Material, SUPPLIERS } from "@/lib/types";
+import { PRODUCT_MASTER, Product } from "@/lib/productMaster";
 
 type Props = {
   basicInfo: BasicInfo;
+  materials: Material[];
+  onMaterialsChange: (materials: Material[]) => void;
 };
 
-export default function MaterialsStep({ basicInfo }: Props) {
-  const [materials, setMaterials] = useState<Material[]>([]);
+export default function MaterialsStep({ basicInfo, materials, onMaterialsChange }: Props) {
   const [productHistory, setProductHistory] = useState<string[]>([]);
+  const [openSuggest, setOpenSuggest] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState<{ [key: string]: string }>({});
 
   useEffect(() => {
     const saved = localStorage.getItem("productHistory");
-    if (saved) {
-      setProductHistory(JSON.parse(saved));
-    }
+    if (saved) setProductHistory(JSON.parse(saved));
   }, []);
 
   const addToHistory = (productName: string) => {
@@ -73,28 +47,25 @@ export default function MaterialsStep({ basicInfo }: Props) {
       shippingFee: 0,
       carrier: "大竹",
     };
-    setMaterials([...materials, newMaterial]);
+    onMaterialsChange([...materials, newMaterial]);
   };
 
   const removeMaterial = (id: string) => {
-    setMaterials(materials.filter((m) => m.id !== id));
+    onMaterialsChange(materials.filter((m) => m.id !== id));
   };
 
   const updateMaterial = (id: string, field: keyof Material, value: string | number | boolean) => {
-    setMaterials(
+    onMaterialsChange(
       materials.map((m) => {
         if (m.id !== id) return m;
 
-        // 数値フィールドの処理
         let updatedValue = value;
         if (["quantity", "purchasePrice", "sellingPrice", "shippingFee"].includes(field)) {
-          // 入力が空の場合は0として扱うが、表示上は空を許容するための処理はInput側で行う
           updatedValue = value === "" ? 0 : Number(value);
         }
 
         const updated = { ...m, [field]: updatedValue };
 
-        // 自動計算
         if (field === "quantity" || field === "purchasePrice" || field === "sellingPrice") {
           updated.purchaseTotal = Number(updated.quantity) * Number(updated.purchasePrice);
           updated.sellingTotal = Number(updated.quantity) * Number(updated.sellingPrice);
@@ -107,6 +78,38 @@ export default function MaterialsStep({ basicInfo }: Props) {
         return updated;
       })
     );
+  };
+
+  const selectProduct = (materialId: string, product: Product) => {
+    onMaterialsChange(
+      materials.map((m) => {
+        if (m.id !== materialId) return m;
+        return {
+          ...m,
+          productName: product.name,
+          modelType: product.modelType,
+          supplier: product.supplier,
+          purchasePrice: product.purchasePrice,
+          sellingPrice: product.sellingPrice,
+          purchaseTotal: m.quantity * product.purchasePrice,
+          sellingTotal: m.quantity * product.sellingPrice,
+        };
+      })
+    );
+    addToHistory(product.name);
+    setOpenSuggest(null);
+    setSearchQuery((prev) => ({ ...prev, [materialId]: "" }));
+  };
+
+  const getSuggestions = (materialId: string) => {
+    const query = searchQuery[materialId] || "";
+    const masterMatches = PRODUCT_MASTER.filter(
+      (p) => !query || p.name.includes(query) || p.modelType.includes(query)
+    );
+    const historyMatches = productHistory
+      .filter((h) => !query || h.includes(query))
+      .filter((h) => !masterMatches.some((p) => p.name === h));
+    return { masterMatches, historyMatches };
   };
 
   const calculateTotals = () => {
@@ -157,13 +160,67 @@ export default function MaterialsStep({ basicInfo }: Props) {
                 />
               </div>
 
-              <div className="md:col-span-2">
-                <Label className="text-xs">品名（履歴から選択可能）</Label>
+              <div className="md:col-span-2 relative">
+                <Label className="text-xs">品名（マスタから選択 or 手入力）</Label>
                 <Input
-                  value={material.productName}
-                  onChange={(e) => updateMaterial(material.id, "productName", e.target.value)}
-                  placeholder="商品名を入力"
+                  value={openSuggest === material.id ? (searchQuery[material.id] ?? material.productName) : material.productName}
+                  onChange={(e) => {
+                    setSearchQuery((prev) => ({ ...prev, [material.id]: e.target.value }));
+                    updateMaterial(material.id, "productName", e.target.value);
+                    setOpenSuggest(material.id);
+                  }}
+                  onFocus={() => setOpenSuggest(material.id)}
+                  onBlur={() => setTimeout(() => setOpenSuggest(null), 200)}
+                  placeholder="商品名を入力（候補が表示されます）"
                 />
+                {openSuggest === material.id && (
+                  <div className="absolute z-10 w-full mt-1 bg-white border rounded-md shadow-lg max-h-48 overflow-y-auto">
+                    {(() => {
+                      const { masterMatches, historyMatches } = getSuggestions(material.id);
+                      return (
+                        <>
+                          {masterMatches.length > 0 && (
+                            <>
+                              <div className="px-3 py-1 text-xs text-gray-500 bg-gray-50 font-semibold">製品マスタ</div>
+                              {masterMatches.map((p) => (
+                                <button
+                                  key={p.name}
+                                  className="w-full text-left px-3 py-2 hover:bg-blue-50 text-sm border-b"
+                                  onMouseDown={() => selectProduct(material.id, p)}
+                                >
+                                  <div className="font-medium">{p.name}</div>
+                                  <div className="text-xs text-gray-500">
+                                    {p.modelType} | 仕入 ¥{p.purchasePrice.toLocaleString()} → 売値 ¥{p.sellingPrice.toLocaleString()}
+                                  </div>
+                                </button>
+                              ))}
+                            </>
+                          )}
+                          {historyMatches.length > 0 && (
+                            <>
+                              <div className="px-3 py-1 text-xs text-gray-500 bg-gray-50 font-semibold">入力履歴</div>
+                              {historyMatches.map((h) => (
+                                <button
+                                  key={h}
+                                  className="w-full text-left px-3 py-2 hover:bg-blue-50 text-sm"
+                                  onMouseDown={() => {
+                                    updateMaterial(material.id, "productName", h);
+                                    setOpenSuggest(null);
+                                  }}
+                                >
+                                  {h}
+                                </button>
+                              ))}
+                            </>
+                          )}
+                          {masterMatches.length === 0 && historyMatches.length === 0 && (
+                            <div className="px-3 py-2 text-sm text-gray-400">該当なし（そのまま手入力できます）</div>
+                          )}
+                        </>
+                      );
+                    })()}
+                  </div>
+                )}
               </div>
 
               <div>
@@ -183,9 +240,7 @@ export default function MaterialsStep({ basicInfo }: Props) {
                   onChange={(e) => updateMaterial(material.id, "isStock", e.target.checked)}
                   className="w-4 h-4"
                 />
-                <Label htmlFor={`stock-${material.id}`} className="text-xs">
-                  在庫
-                </Label>
+                <Label htmlFor={`stock-${material.id}`} className="text-xs">在庫</Label>
               </div>
 
               <div>
@@ -196,9 +251,7 @@ export default function MaterialsStep({ basicInfo }: Props) {
                   className="w-full border rounded-md px-3 py-2 text-sm"
                 >
                   {SUPPLIERS.map((s) => (
-                    <option key={s} value={s}>
-                      {s}
-                    </option>
+                    <option key={s} value={s}>{s}</option>
                   ))}
                 </select>
               </div>
@@ -289,7 +342,7 @@ export default function MaterialsStep({ basicInfo }: Props) {
       )}
 
       <div className="bg-blue-50 p-4 rounded-lg text-sm text-blue-800">
-        <p>💡 ヒント：材料の入力も任意です。入力が完了したら「保存して完了」ボタンで終了してください。</p>
+        <p>💡 ヒント：品名欄をタップすると製品マスタから選択できます。単価は自動入力され、手動で変更も可能です。</p>
       </div>
     </div>
   );
