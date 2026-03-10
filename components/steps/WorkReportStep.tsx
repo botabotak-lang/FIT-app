@@ -120,8 +120,8 @@ export default function WorkReportStep({
     const sorted = [...workDayEntries].sort((a, b) =>
       a.date.localeCompare(b.date)
     );
-    const year = basicInfo.completionDate
-      ? toReiwa(basicInfo.completionDate)
+    const year = basicInfo.receptionDate
+      ? toReiwa(basicInfo.receptionDate)
       : toReiwa(new Date().toISOString().slice(0, 10));
 
     const rows = sorted

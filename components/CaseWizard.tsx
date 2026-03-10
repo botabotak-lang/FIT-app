@@ -42,7 +42,7 @@ export default function CaseWizard({ initialCase }: Props) {
       category: "",
       modelName: "",
       manufacturer: "",
-      completionDate: "",
+      receptionDate: "",
     }
   );
   const [selectedWorkers, setSelectedWorkers] = useState<Worker[]>(

@@ -12,7 +12,7 @@ type BasicInfo = {
   category: string;
   modelName: string;
   manufacturer: string;
-  completionDate: string;
+  receptionDate: string;
 };
 
 type Props = {
@@ -96,12 +96,12 @@ export default function BasicInfoStep({ basicInfo, setBasicInfo }: Props) {
         </div>
 
         <div>
-          <Label htmlFor="completionDate">完成月日</Label>
+          <Label htmlFor="receptionDate">受付日</Label>
           <Input
-            id="completionDate"
+            id="receptionDate"
             type="date"
-            value={basicInfo.completionDate}
-            onChange={(e) => updateField("completionDate", e.target.value)}
+            value={basicInfo.receptionDate}
+            onChange={(e) => updateField("receptionDate", e.target.value)}
           />
         </div>
       </div>

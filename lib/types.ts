@@ -6,7 +6,7 @@ export type BasicInfo = {
   category: string;
   modelName: string;
   manufacturer: string;
-  completionDate: string;
+  receptionDate: string;
 };
 
 export type TimeRange = {
