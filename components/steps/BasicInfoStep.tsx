@@ -11,6 +11,7 @@ type BasicInfo = {
   shipName: string;
   category: string;
   modelName: string;
+  manufacturer: string;
   completionDate: string;
 };
 
@@ -81,6 +82,16 @@ export default function BasicInfoStep({ basicInfo, setBasicInfo }: Props) {
             value={basicInfo.modelName}
             onChange={(e) => updateField("modelName", e.target.value)}
             placeholder="型名を入力"
+          />
+        </div>
+
+        <div>
+          <Label htmlFor="manufacturer">製造者</Label>
+          <Input
+            id="manufacturer"
+            value={basicInfo.manufacturer}
+            onChange={(e) => updateField("manufacturer", e.target.value)}
+            placeholder="例：古野電気、JRC"
           />
         </div>
 

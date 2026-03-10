@@ -1,22 +1,29 @@
 export type Worker = "大竹" | "豊島" | "鈴木" | "内田" | "新人";
-export type TimeCategory = "regular" | "overtime" | "holiday" | "travel";
 
 export type BasicInfo = {
   customer: string;
   shipName: string;
   category: string;
   modelName: string;
+  manufacturer: string;
   completionDate: string;
 };
 
-export type TimeSlot = {
-  startTime: string;
-  endTime: string;
-  category: TimeCategory;
+export type TimeRange = {
+  start: string;
+  end: string;
 };
 
-export type WorkerTimes = {
-  [key in Worker]?: TimeSlot[];
+export type WorkDayEntry = {
+  id: string;
+  date: string;
+  worker: Worker;
+  location: string;
+  workContent: string;
+  travel: TimeRange;
+  regular: TimeRange;
+  overtime: TimeRange;
+  holiday: TimeRange;
 };
 
 export type Material = {
@@ -40,13 +47,6 @@ export type DocumentType = "estimate" | "invoice";
 export const REGULAR_RATE = 7000;
 export const HOLIDAY_RATE = 8400;
 export const TRAVEL_RATE = 0.8;
-
-export const TIME_CATEGORY_LABELS: { [key in TimeCategory]: string } = {
-  regular: "時間内",
-  overtime: "時間外",
-  holiday: "休日",
-  travel: "移動",
-};
 
 export const WORKERS: Worker[] = ["大竹", "豊島", "鈴木", "内田", "新人"];
 

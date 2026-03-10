@@ -5,8 +5,8 @@ import { Button } from "@/components/ui/button";
 import { FileText, FileSpreadsheet, Download } from "lucide-react";
 import {
   BasicInfo,
-  Worker,
-  WorkerTimes,
+  WorkDayEntry,
+  TimeRange,
   Material,
   DocumentType,
   REGULAR_RATE,
@@ -18,8 +18,7 @@ import * as XLSX from "xlsx";
 
 type Props = {
   basicInfo: BasicInfo;
-  selectedWorkers: Worker[];
-  workerTimes: WorkerTimes;
+  workDayEntries: WorkDayEntry[];
   materials: Material[];
 };
 
@@ -35,51 +34,48 @@ type InvoiceLine = {
 
 export default function InvoicePreviewStep({
   basicInfo,
-  selectedWorkers,
-  workerTimes,
+  workDayEntries,
   materials,
 }: Props) {
   const [docType, setDocType] = useState<DocumentType>("estimate");
   const today = new Date();
   const docNumber = `${docType === "estimate" ? "EST" : "INV"}-${today.getFullYear()}${String(today.getMonth() + 1).padStart(2, "0")}${String(today.getDate()).padStart(2, "0")}-001`;
 
-  const calculateHours = (start: string, end: string): number => {
-    if (!start || !end) return 0;
-    const [sh, sm] = start.split(":").map(Number);
-    const [eh, em] = end.split(":").map(Number);
-    return (eh * 60 + em - (sh * 60 + sm)) / 60;
+  const calcRangeHours = (range: TimeRange): number => {
+    if (!range.start || !range.end) return 0;
+    const [sh, sm] = range.start.split(":").map(Number);
+    const [eh, em] = range.end.split(":").map(Number);
+    const h = (eh * 60 + em - sh * 60 - sm) / 60;
+    return h > 0 ? h : 0;
   };
 
   const buildInvoiceLines = (): InvoiceLine[] => {
     const lines: InvoiceLine[] = [];
     let no = 1;
 
-    selectedWorkers.forEach((worker) => {
-      const slots = workerTimes[worker] || [];
-      let regular = 0, overtime = 0, holiday = 0, travel = 0;
-      slots.forEach((s) => {
-        const h = calculateHours(s.startTime, s.endTime);
-        if (h <= 0) return;
-        switch (s.category) {
-          case "regular": regular += h; break;
-          case "overtime": overtime += h; break;
-          case "holiday": holiday += h; break;
-          case "travel": travel += h; break;
-        }
-      });
+    const workerStats = new Map<string, { regular: number; overtime: number; holiday: number; travel: number }>();
+    workDayEntries.forEach((entry) => {
+      const s = workerStats.get(entry.worker) || { regular: 0, overtime: 0, holiday: 0, travel: 0 };
+      s.regular += calcRangeHours(entry.regular);
+      s.overtime += calcRangeHours(entry.overtime);
+      s.holiday += calcRangeHours(entry.holiday);
+      s.travel += calcRangeHours(entry.travel);
+      workerStats.set(entry.worker, s);
+    });
 
-      if (regular > 0) {
-        lines.push({ no: no++, category: "作業費", description: `作業費（${worker}・時間内）`, quantity: regular.toFixed(1), unit: "h", unitPrice: REGULAR_RATE, amount: Math.round(regular * REGULAR_RATE) });
+    workerStats.forEach((s, worker) => {
+      if (s.regular > 0) {
+        lines.push({ no: no++, category: "作業費", description: `作業費（${worker}・時間内）`, quantity: s.regular.toFixed(1), unit: "h", unitPrice: REGULAR_RATE, amount: Math.round(s.regular * REGULAR_RATE) });
       }
-      if (overtime > 0) {
-        lines.push({ no: no++, category: "作業費", description: `作業費（${worker}・時間外）`, quantity: overtime.toFixed(1), unit: "h", unitPrice: REGULAR_RATE, amount: Math.round(overtime * REGULAR_RATE) });
+      if (s.overtime > 0) {
+        lines.push({ no: no++, category: "作業費", description: `作業費（${worker}・時間外）`, quantity: s.overtime.toFixed(1), unit: "h", unitPrice: REGULAR_RATE, amount: Math.round(s.overtime * REGULAR_RATE) });
       }
-      if (holiday > 0) {
-        lines.push({ no: no++, category: "作業費", description: `作業費（${worker}・休日）`, quantity: holiday.toFixed(1), unit: "h", unitPrice: HOLIDAY_RATE, amount: Math.round(holiday * HOLIDAY_RATE) });
+      if (s.holiday > 0) {
+        lines.push({ no: no++, category: "作業費", description: `作業費（${worker}・休日）`, quantity: s.holiday.toFixed(1), unit: "h", unitPrice: HOLIDAY_RATE, amount: Math.round(s.holiday * HOLIDAY_RATE) });
       }
-      if (travel > 0) {
+      if (s.travel > 0) {
         const rate = Math.round(REGULAR_RATE * TRAVEL_RATE);
-        lines.push({ no: no++, category: "作業費", description: `移動費（${worker}）`, quantity: travel.toFixed(1), unit: "h", unitPrice: rate, amount: Math.round(travel * rate) });
+        lines.push({ no: no++, category: "作業費", description: `移動費（${worker}）`, quantity: s.travel.toFixed(1), unit: "h", unitPrice: rate, amount: Math.round(s.travel * rate) });
       }
     });
 

@@ -1,13 +1,13 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import BasicInfoStep from "@/components/steps/BasicInfoStep";
 import WorkerSelectionStep from "@/components/steps/WorkerSelectionStep";
 import WorkReportStep from "@/components/steps/WorkReportStep";
 import MaterialsStep from "@/components/steps/MaterialsStep";
 import InvoicePreviewStep from "@/components/steps/InvoicePreviewStep";
-import { BasicInfo, Worker, WorkerTimes, Material, TimeCategory } from "@/lib/types";
+import { BasicInfo, Worker, WorkDayEntry, Material } from "@/lib/types";
 
 const TOTAL_STEPS = 5;
 
@@ -26,22 +26,12 @@ export default function Home() {
     shipName: "",
     category: "",
     modelName: "",
+    manufacturer: "",
     completionDate: "",
   });
   const [selectedWorkers, setSelectedWorkers] = useState<Worker[]>([]);
-  const [workerTimes, setWorkerTimes] = useState<WorkerTimes>({});
+  const [workDayEntries, setWorkDayEntries] = useState<WorkDayEntry[]>([]);
   const [materials, setMaterials] = useState<Material[]>([]);
-
-  useEffect(() => {
-    selectedWorkers.forEach((worker) => {
-      if (!workerTimes[worker] || workerTimes[worker]!.length === 0) {
-        setWorkerTimes((prev) => ({
-          ...prev,
-          [worker]: [{ startTime: "", endTime: "", category: "regular" as TimeCategory }],
-        }));
-      }
-    });
-  }, [selectedWorkers]);
 
   const canProceed = () => {
     switch (currentStep) {
@@ -78,8 +68,8 @@ export default function Home() {
           <WorkReportStep
             basicInfo={basicInfo}
             selectedWorkers={selectedWorkers}
-            workerTimes={workerTimes}
-            onWorkerTimesChange={setWorkerTimes}
+            workDayEntries={workDayEntries}
+            onWorkDayEntriesChange={setWorkDayEntries}
           />
         );
       case 4:
@@ -94,8 +84,7 @@ export default function Home() {
         return (
           <InvoicePreviewStep
             basicInfo={basicInfo}
-            selectedWorkers={selectedWorkers}
-            workerTimes={workerTimes}
+            workDayEntries={workDayEntries}
             materials={materials}
           />
         );
