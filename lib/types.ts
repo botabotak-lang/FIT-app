@@ -50,6 +50,21 @@ export const TRAVEL_RATE = 0.8;
 
 export const WORKERS: Worker[] = ["大竹", "豊島", "鈴木", "内田", "新人"];
 
+export type CaseStatus = "draft" | "materials_added" | "invoiced";
+
+export type ShipCase = {
+  id: string;
+  createdAt: string;
+  updatedAt: string;
+  status: CaseStatus;
+  basicInfo: BasicInfo;
+  selectedWorkers: Worker[];
+  workDayEntries: WorkDayEntry[];
+  materials: Material[];
+};
+
+export const CASES_STORAGE_KEY = "fit_ship_cases";
+
 export const SUPPLIERS = ["モノタロウ", "アマゾン", "ハードストック", "JRC", "その他"];
 
 export const COMPANY_INFO = {

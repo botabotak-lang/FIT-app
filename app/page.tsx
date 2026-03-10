@@ -1,171 +1,182 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import BasicInfoStep from "@/components/steps/BasicInfoStep";
-import WorkerSelectionStep from "@/components/steps/WorkerSelectionStep";
-import WorkReportStep from "@/components/steps/WorkReportStep";
-import MaterialsStep from "@/components/steps/MaterialsStep";
-import InvoicePreviewStep from "@/components/steps/InvoicePreviewStep";
-import { BasicInfo, Worker, WorkDayEntry, Material } from "@/lib/types";
+import { Input } from "@/components/ui/input";
+import { ShipCase, CaseStatus } from "@/lib/types";
+import { getCases, deleteCase } from "@/lib/storage";
+import { Plus, Ship, ChevronDown, ChevronRight, Trash2, FileText } from "lucide-react";
 
-const TOTAL_STEPS = 5;
+const STATUS_CONFIG: Record<CaseStatus, { label: string; color: string }> = {
+  draft: { label: "作業中", color: "bg-yellow-100 text-yellow-800" },
+  materials_added: { label: "材料入力済", color: "bg-blue-100 text-blue-800" },
+  invoiced: { label: "請求済み", color: "bg-green-100 text-green-800" },
+};
 
-const STEP_TITLES = [
-  "基本情報の入力",
-  "作業者の選択",
-  "作業報告書の入力",
-  "材料持出表の入力",
-  "見積書・請求書の確認",
-];
+export default function HomePage() {
+  const router = useRouter();
+  const [cases, setCases] = useState<ShipCase[]>([]);
+  const [search, setSearch] = useState("");
+  const [expandedShips, setExpandedShips] = useState<Set<string>>(new Set());
 
-export default function Home() {
-  const [currentStep, setCurrentStep] = useState(1);
-  const [basicInfo, setBasicInfo] = useState<BasicInfo>({
-    customer: "",
-    shipName: "",
-    category: "",
-    modelName: "",
-    manufacturer: "",
-    completionDate: "",
-  });
-  const [selectedWorkers, setSelectedWorkers] = useState<Worker[]>([]);
-  const [workDayEntries, setWorkDayEntries] = useState<WorkDayEntry[]>([]);
-  const [materials, setMaterials] = useState<Material[]>([]);
+  useEffect(() => {
+    setCases(getCases());
+  }, []);
 
-  const canProceed = () => {
-    switch (currentStep) {
-      case 1: return basicInfo.customer && basicInfo.shipName;
-      case 2: return selectedWorkers.length > 0;
-      case 3: return true;
-      case 4: return true;
-      case 5: return true;
-      default: return false;
-    }
+  const handleDelete = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!confirm("この案件を削除しますか？")) return;
+    deleteCase(id);
+    setCases(getCases());
   };
 
-  const nextStep = () => {
-    if (currentStep < TOTAL_STEPS) setCurrentStep(currentStep + 1);
+  const toggleShip = (shipName: string) => {
+    setExpandedShips((prev) => {
+      const next = new Set(prev);
+      if (next.has(shipName)) next.delete(shipName);
+      else next.add(shipName);
+      return next;
+    });
   };
 
-  const prevStep = () => {
-    if (currentStep > 1) setCurrentStep(currentStep - 1);
-  };
+  // 船名でグループ化
+  const grouped = cases.reduce<Record<string, ShipCase[]>>((acc, c) => {
+    const key = c.basicInfo.shipName || "（船名未入力）";
+    if (!acc[key]) acc[key] = [];
+    acc[key].push(c);
+    return acc;
+  }, {});
 
-  const renderStep = () => {
-    switch (currentStep) {
-      case 1:
-        return <BasicInfoStep basicInfo={basicInfo} setBasicInfo={setBasicInfo} />;
-      case 2:
-        return (
-          <WorkerSelectionStep
-            selectedWorkers={selectedWorkers}
-            setSelectedWorkers={setSelectedWorkers}
-          />
-        );
-      case 3:
-        return (
-          <WorkReportStep
-            basicInfo={basicInfo}
-            selectedWorkers={selectedWorkers}
-            workDayEntries={workDayEntries}
-            onWorkDayEntriesChange={setWorkDayEntries}
-          />
-        );
-      case 4:
-        return (
-          <MaterialsStep
-            basicInfo={basicInfo}
-            materials={materials}
-            onMaterialsChange={setMaterials}
-          />
-        );
-      case 5:
-        return (
-          <InvoicePreviewStep
-            basicInfo={basicInfo}
-            workDayEntries={workDayEntries}
-            materials={materials}
-          />
-        );
-      default:
-        return null;
-    }
-  };
+  // 検索フィルタ
+  const filteredKeys = Object.keys(grouped).filter(
+    (k) =>
+      k.toLowerCase().includes(search.toLowerCase()) ||
+      grouped[k].some((c) =>
+        c.basicInfo.customer.toLowerCase().includes(search.toLowerCase())
+      )
+  );
 
   return (
-    <main className="min-h-screen bg-gray-50 p-4 md:p-8">
-      <div className="max-w-4xl mx-auto">
-        <h1 className="text-2xl md:text-3xl font-bold text-gray-900 mb-6">
-          船舶修理作業報告システム
-        </h1>
-
-        {/* ステップインジケーター */}
-        <div className="mb-8">
-          <div className="flex items-center justify-between mb-2">
-            {Array.from({ length: TOTAL_STEPS }, (_, i) => i + 1).map((step) => (
-              <div key={step} className="flex items-center flex-1">
-                <div
-                  className={`
-                    w-8 h-8 md:w-10 md:h-10 rounded-full flex items-center justify-center font-semibold text-sm md:text-base
-                    ${
-                      step === currentStep
-                        ? "bg-blue-600 text-white"
-                        : step < currentStep
-                        ? "bg-green-600 text-white"
-                        : "bg-gray-300 text-gray-600"
-                    }
-                  `}
-                >
-                  {step < currentStep ? "✓" : step}
-                </div>
-                {step < TOTAL_STEPS && (
-                  <div
-                    className={`flex-1 h-1 mx-1 md:mx-2 ${
-                      step < currentStep ? "bg-green-600" : "bg-gray-300"
-                    }`}
-                  />
-                )}
-              </div>
-            ))}
-          </div>
-          <div className="text-center text-sm text-gray-600">
-            ステップ {currentStep} / {TOTAL_STEPS}: {STEP_TITLES[currentStep - 1]}
-          </div>
-        </div>
-
-        {/* コンテンツ */}
-        <div className="bg-white rounded-lg shadow-md p-6 mb-6">
-          {renderStep()}
-        </div>
-
-        {/* ナビゲーションボタン */}
-        <div className="flex gap-4">
-          <Button
-            onClick={prevStep}
-            disabled={currentStep === 1}
-            variant="outline"
-            className="flex-1"
-          >
-            ← 戻る
+    <main className="min-h-screen bg-gray-50 p-4">
+      <div className="max-w-2xl mx-auto">
+        {/* ヘッダー */}
+        <div className="flex items-center justify-between mb-6">
+          <h1 className="text-2xl font-bold text-gray-900">修理作業報告</h1>
+          <Button onClick={() => router.push("/case/new")}>
+            <Plus className="w-4 h-4 mr-2" />
+            新規作業
           </Button>
-          {currentStep < TOTAL_STEPS ? (
-            <Button
-              onClick={nextStep}
-              disabled={!canProceed()}
-              className="flex-1"
-            >
-              次へ →
-            </Button>
-          ) : (
-            <Button
-              className="flex-1 bg-green-600 hover:bg-green-700"
-              onClick={() => alert("データの保存機能はPhase 2で実装予定です")}
-            >
-              保存して完了
-            </Button>
-          )}
         </div>
+
+        {/* 検索 */}
+        <Input
+          placeholder="船名・顧客名で検索"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="mb-3 bg-white"
+        />
+
+        <p className="text-sm text-gray-500 mb-4">
+          {filteredKeys.length}隻 / {cases.length}件
+        </p>
+
+        {/* 一覧 */}
+        {filteredKeys.length === 0 ? (
+          <div className="text-center py-16 text-gray-400">
+            <Ship className="w-12 h-12 mx-auto mb-3 opacity-30" />
+            <p className="mb-4">
+              {cases.length === 0 ? "まだ作業報告がありません" : "検索結果がありません"}
+            </p>
+            {cases.length === 0 && (
+              <Button onClick={() => router.push("/case/new")}>
+                <Plus className="w-4 h-4 mr-2" />
+                最初の作業報告を作成
+              </Button>
+            )}
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {filteredKeys.sort().map((shipName) => {
+              const shipCases = grouped[shipName].sort((a, b) =>
+                b.updatedAt.localeCompare(a.updatedAt)
+              );
+              const isExpanded = expandedShips.has(shipName);
+              const latestCase = shipCases[0];
+              const statusCfg = STATUS_CONFIG[latestCase.status];
+
+              return (
+                <div key={shipName} className="bg-white rounded-xl shadow-sm overflow-hidden">
+                  {/* 船名カード */}
+                  <button
+                    className="w-full flex items-center justify-between p-4 hover:bg-gray-50 transition-colors"
+                    onClick={() => toggleShip(shipName)}
+                  >
+                    <div className="flex items-center gap-3">
+                      <Ship className="w-5 h-5 text-blue-500 shrink-0" />
+                      <div className="text-left">
+                        <div className="font-semibold text-gray-900">{shipName}</div>
+                        <div className="text-sm text-gray-500">
+                          {latestCase.basicInfo.customer} ・ {shipCases.length}件
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className={`text-xs px-2 py-1 rounded-full font-medium ${statusCfg.color}`}>
+                        {statusCfg.label}
+                      </span>
+                      {isExpanded ? (
+                        <ChevronDown className="w-4 h-4 text-gray-400" />
+                      ) : (
+                        <ChevronRight className="w-4 h-4 text-gray-400" />
+                      )}
+                    </div>
+                  </button>
+
+                  {/* 案件一覧（展開時） */}
+                  {isExpanded && (
+                    <div className="border-t border-gray-100">
+                      {shipCases.map((c) => {
+                        const cfg = STATUS_CONFIG[c.status];
+                        return (
+                          <div
+                            key={c.id}
+                            className="flex items-center justify-between px-4 py-3 hover:bg-gray-50 cursor-pointer border-b border-gray-50 last:border-0"
+                            onClick={() => router.push(`/case/${c.id}`)}
+                          >
+                            <div className="flex items-center gap-3">
+                              <FileText className="w-4 h-4 text-gray-400 shrink-0" />
+                              <div>
+                                <div className="text-sm font-medium text-gray-900">
+                                  {c.basicInfo.category || "（科目未入力）"}
+                                </div>
+                                <div className="text-xs text-gray-500">
+                                  {new Date(c.updatedAt).toLocaleDateString("ja-JP")}
+                                </div>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className={`text-xs px-2 py-1 rounded-full font-medium ${cfg.color}`}>
+                                {cfg.label}
+                              </span>
+                              <button
+                                onClick={(e) => handleDelete(c.id, e)}
+                                className="p-1 text-gray-400 hover:text-red-500 transition-colors"
+                                aria-label="削除"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </main>
   );
