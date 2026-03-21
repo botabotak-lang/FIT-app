@@ -9,13 +9,18 @@ import {
   BasicInfo,
   Worker,
   WorkDayEntry,
-  TimeRange,
+  TimeBlock,
+  TimeBlockKind,
   WORKERS,
-  REGULAR_RATE,
-  HOLIDAY_RATE,
-  TRAVEL_RATE,
-  COMPANY_INFO,
+  TIME_BLOCK_LABELS,
 } from "@/lib/types";
+import {
+  newTimeBlockId,
+  calcBlockHours,
+  calcLaborCostForEntry,
+  aggregateRangesForKind,
+  formatBreaksForContent,
+} from "@/lib/workDayEntry";
 
 type Props = {
   basicInfo: BasicInfo;
@@ -23,14 +28,6 @@ type Props = {
   workDayEntries: WorkDayEntry[];
   onWorkDayEntriesChange: (entries: WorkDayEntry[]) => void;
 };
-
-function calcHours(range: TimeRange): number {
-  if (!range.start || !range.end) return 0;
-  const [sh, sm] = range.start.split(":").map(Number);
-  const [eh, em] = range.end.split(":").map(Number);
-  const h = (eh * 60 + em - sh * 60 - sm) / 60;
-  return h > 0 ? h : 0;
-}
 
 function toReiwa(dateStr: string): string {
   if (!dateStr) return "";
@@ -42,12 +39,6 @@ function formatMonthDay(dateStr: string): string {
   if (!dateStr) return "";
   const d = new Date(dateStr);
   return `${d.getMonth() + 1}/${d.getDate()}`;
-}
-
-function formatRange(range: TimeRange): string {
-  if (!range.start && !range.end) return "";
-  if (range.start && range.end) return `${range.start}~${range.end}`;
-  return range.start || range.end;
 }
 
 export default function WorkReportStep({
@@ -68,10 +59,7 @@ export default function WorkReportStep({
       worker: defaultWorker,
       location: "",
       workContent: "",
-      travel: { start: "", end: "" },
-      regular: { start: "", end: "" },
-      overtime: { start: "", end: "" },
-      holiday: { start: "", end: "" },
+      blocks: [],
     };
     onWorkDayEntriesChange([...workDayEntries, newEntry]);
   };
@@ -86,33 +74,46 @@ export default function WorkReportStep({
     );
   };
 
-  const updateRange = (
-    id: string,
-    category: "travel" | "regular" | "overtime" | "holiday",
-    field: "start" | "end",
-    value: string
-  ) => {
-    const entry = workDayEntries.find((e) => e.id === id);
-    if (!entry) return;
+  const addBlock = (entryId: string) => {
+    const block: TimeBlock = {
+      id: newTimeBlockId(),
+      kind: "regular",
+      start: "",
+      end: "",
+    };
     onWorkDayEntriesChange(
       workDayEntries.map((e) =>
-        e.id === id
-          ? { ...e, [category]: { ...e[category], [field]: value } }
+        e.id === entryId ? { ...e, blocks: [...e.blocks, block] } : e
+      )
+    );
+  };
+
+  const removeBlock = (entryId: string, blockId: string) => {
+    onWorkDayEntriesChange(
+      workDayEntries.map((e) =>
+        e.id === entryId
+          ? { ...e, blocks: e.blocks.filter((b) => b.id !== blockId) }
           : e
       )
     );
   };
 
-  const calcEntryCost = (entry: WorkDayEntry) => {
-    const travelH = calcHours(entry.travel);
-    const regularH = calcHours(entry.regular);
-    const overtimeH = calcHours(entry.overtime);
-    const holidayH = calcHours(entry.holiday);
-    return Math.round(
-      travelH * REGULAR_RATE * TRAVEL_RATE +
-        regularH * REGULAR_RATE +
-        overtimeH * REGULAR_RATE +
-        holidayH * HOLIDAY_RATE
+  const updateBlock = (
+    entryId: string,
+    blockId: string,
+    patch: Partial<Pick<TimeBlock, "kind" | "start" | "end">>
+  ) => {
+    onWorkDayEntriesChange(
+      workDayEntries.map((e) =>
+        e.id === entryId
+          ? {
+              ...e,
+              blocks: e.blocks.map((b) =>
+                b.id === blockId ? { ...b, ...patch } : b
+              ),
+            }
+          : e
+      )
     );
   };
 
@@ -129,13 +130,13 @@ export default function WorkReportStep({
         (e) => `
       <tr>
         <td class="center">${formatMonthDay(e.date)}</td>
-        <td class="center">${formatRange(e.travel)}</td>
-        <td class="center">${formatRange(e.regular)}</td>
-        <td class="center">${formatRange(e.overtime)}</td>
-        <td class="center">${formatRange(e.holiday)}</td>
+        <td class="center">${aggregateRangesForKind(e, "travel")}</td>
+        <td class="center">${aggregateRangesForKind(e, "regular")}</td>
+        <td class="center">${aggregateRangesForKind(e, "overtime")}</td>
+        <td class="center">${aggregateRangesForKind(e, "holiday")}</td>
         <td class="center">${e.worker}</td>
         <td class="center">${e.location}</td>
-        <td>${e.workContent}</td>
+        <td>${formatBreaksForContent(e)}</td>
       </tr>`
       )
       .join("");
@@ -192,7 +193,7 @@ export default function WorkReportStep({
         <th class="col-time">休日</th>
         <th class="col-worker">作業者</th>
         <th class="col-location">場　所</th>
-        <th class="col-content">作　　業　　内　　容</th>
+        <th class="col-content">作　　業　　内　　容<br><span style="font-weight:normal;font-size:9px">（休憩は先頭に記載）</span></th>
       </tr>
     </thead>
     <tbody>
@@ -213,6 +214,14 @@ export default function WorkReportStep({
     a.date.localeCompare(b.date)
   );
 
+  const blockKinds: TimeBlockKind[] = [
+    "travel",
+    "break",
+    "regular",
+    "overtime",
+    "holiday",
+  ];
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -220,6 +229,9 @@ export default function WorkReportStep({
           <h2 className="text-xl font-semibold">作業報告書の入力</h2>
           <p className="text-sm text-gray-500 mt-1">
             {basicInfo.shipName} / {basicInfo.customer}
+          </p>
+          <p className="text-xs text-gray-500 mt-1">
+            移動・休憩・作業内・作業外・休日を、時間帯ごとに「＋時間を追加」で何度でも登録できます。
           </p>
         </div>
         <Button variant="outline" onClick={handlePrint} disabled={workDayEntries.length === 0}>
@@ -240,10 +252,9 @@ export default function WorkReportStep({
 
       <div className="space-y-4">
         {sortedEntries.map((entry) => {
-          const cost = calcEntryCost(entry);
+          const cost = calcLaborCostForEntry(entry);
           return (
             <div key={entry.id} className="border rounded-xl p-4 space-y-4 bg-gray-50">
-              {/* 基本情報行 */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                 <div>
                   <Label className="text-xs text-gray-600">月/日</Label>
@@ -265,7 +276,9 @@ export default function WorkReportStep({
                     </SelectTrigger>
                     <SelectContent>
                       {WORKERS.map((w) => (
-                        <SelectItem key={w} value={w}>{w}</SelectItem>
+                        <SelectItem key={w} value={w}>
+                          {w}
+                        </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -281,58 +294,106 @@ export default function WorkReportStep({
                 </div>
               </div>
 
-              {/* 作業内容 */}
               <div>
                 <Label className="text-xs text-gray-600">作業内容</Label>
                 <textarea
                   value={entry.workContent}
                   onChange={(e) => updateEntry(entry.id, { workContent: e.target.value })}
-                  placeholder="作業内容を入力してください"
+                  placeholder="作業内容を入力（休憩は下の時間ブロックで登録すると印刷時に先頭へ結合されます）"
                   rows={2}
                   className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm bg-white resize-none focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
 
-              {/* 時間範囲 */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                {(
-                  [
-                    { key: "travel", label: "移動" },
-                    { key: "regular", label: "時間内（平日）" },
-                    { key: "overtime", label: "時間外（平日）" },
-                    { key: "holiday", label: "休日" },
-                  ] as const
-                ).map(({ key, label }) => (
-                  <div key={key} className="space-y-1">
-                    <Label className="text-xs text-gray-600">{label}</Label>
-                    <div className="flex items-center gap-1">
-                      <Input
-                        type="time"
-                        value={entry[key].start}
-                        onChange={(e) => updateRange(entry.id, key, "start", e.target.value)}
-                        className="bg-white text-xs px-1"
-                      />
-                      <span className="text-gray-400 text-xs">~</span>
-                      <Input
-                        type="time"
-                        value={entry[key].end}
-                        onChange={(e) => updateRange(entry.id, key, "end", e.target.value)}
-                        className="bg-white text-xs px-1"
-                      />
-                    </div>
-                    {(entry[key].start || entry[key].end) && (
-                      <p className="text-xs text-blue-600">
-                        {calcHours(entry[key]).toFixed(1)}h
-                      </p>
-                    )}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label className="text-sm font-medium text-gray-800">時間ブロック</Label>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => addBlock(entry.id)}
+                  >
+                    <Plus className="w-4 h-4 mr-1" />
+                    時間を追加
+                  </Button>
+                </div>
+                {entry.blocks.length === 0 ? (
+                  <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                    「時間を追加」から移動・休憩・作業内などを登録してください。
+                  </p>
+                ) : (
+                  <div className="space-y-2">
+                    {entry.blocks.map((b, idx) => (
+                      <div
+                        key={b.id}
+                        className="flex flex-col sm:flex-row sm:flex-wrap sm:items-end gap-2 bg-white border rounded-lg p-3"
+                      >
+                        <span className="text-xs text-gray-400 w-6 shrink-0 pt-2">{idx + 1}.</span>
+                        <div className="w-full sm:w-40">
+                          <Label className="text-xs text-gray-500">種別</Label>
+                          <Select
+                            value={b.kind}
+                            onValueChange={(v) =>
+                              updateBlock(entry.id, b.id, { kind: v as TimeBlockKind })
+                            }
+                          >
+                            <SelectTrigger className="h-9">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {blockKinds.map((k) => (
+                                <SelectItem key={k} value={k}>
+                                  {TIME_BLOCK_LABELS[k]}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="flex items-center gap-1 flex-1 min-w-0">
+                          <Input
+                            type="time"
+                            value={b.start}
+                            onChange={(e) =>
+                              updateBlock(entry.id, b.id, { start: e.target.value })
+                            }
+                            className="w-[110px] text-sm"
+                          />
+                          <span className="text-gray-400 text-sm">~</span>
+                          <Input
+                            type="time"
+                            value={b.end}
+                            onChange={(e) =>
+                              updateBlock(entry.id, b.id, { end: e.target.value })
+                            }
+                            className="w-[110px] text-sm"
+                          />
+                          {b.start && b.end && (
+                            <span className="text-xs text-blue-600 ml-1">
+                              {calcBlockHours(b).toFixed(1)}h
+                            </span>
+                          )}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => removeBlock(entry.id, b.id)}
+                          className="p-2 text-red-500 hover:bg-red-50 rounded-lg self-end sm:self-auto"
+                          aria-label="このブロックを削除"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ))}
                   </div>
-                ))}
+                )}
               </div>
 
-              {/* 合計と削除 */}
               <div className="flex justify-between items-center pt-2 border-t border-gray-200">
                 <span className="text-sm font-semibold text-blue-700">
                   工賃: ¥{cost.toLocaleString()}
+                  <span className="text-xs font-normal text-gray-500 ml-2">
+                    （休憩は0円）
+                  </span>
                 </span>
                 <button
                   type="button"
@@ -340,7 +401,7 @@ export default function WorkReportStep({
                   className="flex items-center gap-1 text-sm text-red-500 hover:text-red-700"
                 >
                   <Trash2 className="w-4 h-4" />
-                  削除
+                  この日を削除
                 </button>
               </div>
             </div>
@@ -358,7 +419,10 @@ export default function WorkReportStep({
           <div className="bg-blue-50 p-4 rounded-lg flex justify-between items-center">
             <span className="text-sm text-gray-600">工賃合計</span>
             <span className="text-xl font-bold text-blue-700">
-              ¥{workDayEntries.reduce((sum, e) => sum + calcEntryCost(e), 0).toLocaleString()}
+              ¥
+              {workDayEntries
+                .reduce((sum, e) => sum + calcLaborCostForEntry(e), 0)
+                .toLocaleString()}
             </span>
           </div>
         </>

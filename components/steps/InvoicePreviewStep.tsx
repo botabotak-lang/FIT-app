@@ -6,7 +6,6 @@ import { FileText, FileSpreadsheet, Download } from "lucide-react";
 import {
   BasicInfo,
   WorkDayEntry,
-  TimeRange,
   Material,
   DocumentType,
   REGULAR_RATE,
@@ -14,6 +13,7 @@ import {
   TRAVEL_RATE,
   COMPANY_INFO,
 } from "@/lib/types";
+import { calcBlockHours } from "@/lib/workDayEntry";
 import * as XLSX from "xlsx";
 
 type Props = {
@@ -41,14 +41,6 @@ export default function InvoicePreviewStep({
   const today = new Date();
   const docNumber = `${docType === "estimate" ? "EST" : "INV"}-${today.getFullYear()}${String(today.getMonth() + 1).padStart(2, "0")}${String(today.getDate()).padStart(2, "0")}-001`;
 
-  const calcRangeHours = (range: TimeRange): number => {
-    if (!range.start || !range.end) return 0;
-    const [sh, sm] = range.start.split(":").map(Number);
-    const [eh, em] = range.end.split(":").map(Number);
-    const h = (eh * 60 + em - sh * 60 - sm) / 60;
-    return h > 0 ? h : 0;
-  };
-
   const buildInvoiceLines = (): InvoiceLine[] => {
     const lines: InvoiceLine[] = [];
     let no = 1;
@@ -56,10 +48,24 @@ export default function InvoicePreviewStep({
     const workerStats = new Map<string, { regular: number; overtime: number; holiday: number; travel: number }>();
     workDayEntries.forEach((entry) => {
       const s = workerStats.get(entry.worker) || { regular: 0, overtime: 0, holiday: 0, travel: 0 };
-      s.regular += calcRangeHours(entry.regular);
-      s.overtime += calcRangeHours(entry.overtime);
-      s.holiday += calcRangeHours(entry.holiday);
-      s.travel += calcRangeHours(entry.travel);
+      (entry.blocks || []).forEach((b) => {
+        const h = calcBlockHours(b);
+        if (h <= 0 || b.kind === "break") return;
+        switch (b.kind) {
+          case "travel":
+            s.travel += h;
+            break;
+          case "regular":
+            s.regular += h;
+            break;
+          case "overtime":
+            s.overtime += h;
+            break;
+          case "holiday":
+            s.holiday += h;
+            break;
+        }
+      });
       workerStats.set(entry.worker, s);
     });
 

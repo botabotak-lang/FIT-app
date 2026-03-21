@@ -14,16 +14,32 @@ export type TimeRange = {
   end: string;
 };
 
+/** 1日の中の時間ブロック（複数追加可） */
+export type TimeBlockKind = "travel" | "break" | "regular" | "overtime" | "holiday";
+
+export type TimeBlock = {
+  id: string;
+  kind: TimeBlockKind;
+  start: string;
+  end: string;
+};
+
+export const TIME_BLOCK_LABELS: Record<TimeBlockKind, string> = {
+  travel: "移動",
+  break: "休憩",
+  regular: "作業内（平日）",
+  overtime: "作業外（平日）",
+  holiday: "休日",
+};
+
 export type WorkDayEntry = {
   id: string;
   date: string;
   worker: Worker;
   location: string;
   workContent: string;
-  travel: TimeRange;
-  regular: TimeRange;
-  overtime: TimeRange;
-  holiday: TimeRange;
+  /** 時系列で複数追加。旧データは読み込み時に migrate される */
+  blocks: TimeBlock[];
 };
 
 export type Material = {

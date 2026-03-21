@@ -1,9 +1,11 @@
 import { ShipCase, CASES_STORAGE_KEY } from "./types";
+import { normalizeShipCase } from "./workDayEntry";
 
 export function getCases(): ShipCase[] {
   if (typeof window === "undefined") return [];
   const raw = localStorage.getItem(CASES_STORAGE_KEY);
-  return raw ? JSON.parse(raw) : [];
+  const parsed: ShipCase[] = raw ? JSON.parse(raw) : [];
+  return parsed.map(normalizeShipCase);
 }
 
 export function getCaseById(id: string): ShipCase | undefined {
