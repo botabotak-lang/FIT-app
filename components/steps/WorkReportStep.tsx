@@ -306,21 +306,10 @@ export default function WorkReportStep({
               </div>
 
               <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <Label className="text-sm font-medium text-gray-800">時間ブロック</Label>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => addBlock(entry.id)}
-                  >
-                    <Plus className="w-4 h-4 mr-1" />
-                    時間を追加
-                  </Button>
-                </div>
+                <Label className="text-sm font-medium text-gray-800">時間ブロック</Label>
                 {entry.blocks.length === 0 ? (
                   <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-                    「時間を追加」から移動・休憩・作業内などを登録してください。
+                    下の「時間を追加」から移動・休憩・作業内などを登録してください。
                   </p>
                 ) : (
                   <div className="space-y-2">
@@ -386,6 +375,16 @@ export default function WorkReportStep({
                     ))}
                   </div>
                 )}
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="w-full sm:w-auto mt-1"
+                  onClick={() => addBlock(entry.id)}
+                >
+                  <Plus className="w-4 h-4 mr-1" />
+                  時間を追加
+                </Button>
               </div>
 
               <div className="flex justify-between items-center pt-2 border-t border-gray-200">
