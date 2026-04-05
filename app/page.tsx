@@ -151,7 +151,11 @@ export default function HomePage() {
                                   {c.basicInfo.category || "（科目未入力）"}
                                 </div>
                                 <div className="text-xs text-gray-500">
-                                  {new Date(c.updatedAt).toLocaleDateString("ja-JP")}
+                                  {c.basicInfo.receptionDate
+                                    ? new Date(
+                                        c.basicInfo.receptionDate + "T12:00:00"
+                                      ).toLocaleDateString("ja-JP")
+                                    : "—"}
                                 </div>
                               </div>
                             </div>

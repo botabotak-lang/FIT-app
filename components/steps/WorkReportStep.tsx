@@ -4,7 +4,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Trash2, Printer, Plus } from "lucide-react";
+import { Trash2, Printer, Plus, FileSpreadsheet } from "lucide-react";
+import * as XLSX from "xlsx";
 import {
   BasicInfo,
   Worker,
@@ -117,6 +118,59 @@ export default function WorkReportStep({
     );
   };
 
+  const handleExportWorkReportExcel = () => {
+    const sorted = [...workDayEntries].sort((a, b) =>
+      a.date.localeCompare(b.date)
+    );
+    const headerRow = [
+      "月/日",
+      "移動",
+      "作業内（平日）",
+      "作業外（平日）",
+      "休日",
+      "作業者",
+      "場所",
+      "作業内容（休憩は先頭に結合）",
+    ];
+    const dataRows = sorted.map((e) => [
+      formatMonthDay(e.date),
+      aggregateRangesForKind(e, "travel"),
+      aggregateRangesForKind(e, "regular"),
+      aggregateRangesForKind(e, "overtime"),
+      aggregateRangesForKind(e, "holiday"),
+      e.worker,
+      e.location,
+      formatBreaksForContent(e),
+    ]);
+    const aoa: (string | number)[][] = [
+      ["修理作業報告書（1枚目）"],
+      ["船名", basicInfo.shipName || ""],
+      ["顧客", basicInfo.customer || ""],
+      ["科目", basicInfo.category || ""],
+      ["型名", basicInfo.modelName || ""],
+      ["製造者", basicInfo.manufacturer || ""],
+      [],
+      headerRow,
+      ...dataRows,
+    ];
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
+    ws["!cols"] = [
+      { wch: 8 },
+      { wch: 14 },
+      { wch: 14 },
+      { wch: 14 },
+      { wch: 10 },
+      { wch: 8 },
+      { wch: 14 },
+      { wch: 48 },
+    ];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "作業報告1枚目");
+    const stamp = new Date().toISOString().slice(0, 10);
+    const safeShip = (basicInfo.shipName || "案件").replace(/[/\\?*[\]:]/g, "_");
+    XLSX.writeFile(wb, `修理作業報告1枚目_${safeShip}_${stamp}.xlsx`);
+  };
+
   const handlePrint = () => {
     const sorted = [...workDayEntries].sort((a, b) =>
       a.date.localeCompare(b.date)
@@ -136,7 +190,7 @@ export default function WorkReportStep({
         <td class="center">${aggregateRangesForKind(e, "holiday")}</td>
         <td class="center">${e.worker}</td>
         <td class="center">${e.location}</td>
-        <td>${formatBreaksForContent(e)}</td>
+        <td class="work-content">${formatBreaksForContent(e)}</td>
       </tr>`
       )
       .join("");
@@ -144,7 +198,7 @@ export default function WorkReportStep({
     const blankRows = Math.max(0, 15 - sorted.length);
     const blanks = Array(blankRows)
       .fill(
-        `<tr><td>&nbsp;</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>`
+        `<tr><td>&nbsp;</td><td></td><td></td><td></td><td></td><td></td><td></td><td class="work-content"></td></tr>`
       )
       .join("");
 
@@ -161,15 +215,16 @@ export default function WorkReportStep({
   .info-cell:last-child { border-right: none; }
   .info-label { font-size: 10px; color: #555; }
   .info-value { font-size: 12px; font-weight: bold; min-width: 80px; }
-  table { width: 100%; border-collapse: collapse; border: 1px solid #000; }
+  table { width: 100%; table-layout: fixed; border-collapse: collapse; border: 1px solid #000; }
   th { border: 1px solid #000; padding: 3px 4px; text-align: center; background: #f0f0f0; font-size: 10px; white-space: nowrap; }
-  td { border: 1px solid #ccc; padding: 3px 4px; font-size: 10px; height: 20px; }
+  td { border: 1px solid #ccc; padding: 3px 4px; font-size: 10px; min-height: 20px; }
   td.center { text-align: center; white-space: nowrap; }
-  .col-date { width: 5%; }
-  .col-time { width: 8%; }
-  .col-worker { width: 7%; }
-  .col-location { width: 8%; }
-  .col-content { width: auto; }
+  td.work-content { white-space: pre-wrap; word-break: break-word; vertical-align: top; text-align: left; }
+  .col-date { width: 4%; }
+  .col-time { width: 5.5%; }
+  .col-worker { width: 6%; }
+  .col-location { width: 7%; }
+  .col-content { width: 57%; }
   @media print { body { padding: 10px; } }
 </style>
 </head><body>
@@ -224,7 +279,7 @@ export default function WorkReportStep({
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h2 className="text-xl font-semibold">作業報告書の入力</h2>
           <p className="text-sm text-gray-500 mt-1">
@@ -234,10 +289,20 @@ export default function WorkReportStep({
             移動・休憩・作業内・作業外・休日を、時間帯ごとに「＋時間を追加」で何度でも登録できます。
           </p>
         </div>
-        <Button variant="outline" onClick={handlePrint} disabled={workDayEntries.length === 0}>
-          <Printer className="w-4 h-4 mr-2" />
-          1枚目を印刷
-        </Button>
+        <div className="flex flex-col sm:flex-row gap-2 shrink-0">
+          <Button
+            variant="default"
+            onClick={handleExportWorkReportExcel}
+            disabled={workDayEntries.length === 0}
+          >
+            <FileSpreadsheet className="w-4 h-4 mr-2" />
+            Excelで出力（1枚目）
+          </Button>
+          <Button variant="outline" onClick={handlePrint} disabled={workDayEntries.length === 0}>
+            <Printer className="w-4 h-4 mr-2" />
+            印刷
+          </Button>
+        </div>
       </div>
 
       {workDayEntries.length === 0 && (
@@ -299,9 +364,9 @@ export default function WorkReportStep({
                 <textarea
                   value={entry.workContent}
                   onChange={(e) => updateEntry(entry.id, { workContent: e.target.value })}
-                  placeholder="作業内容を入力（休憩は下の時間ブロックで登録すると印刷時に先頭へ結合されます）"
-                  rows={2}
-                  className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm bg-white resize-none focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="作業内容を入力（改行可。休憩は下の時間ブロックで登録すると印刷・Excelで先頭へ結合されます）"
+                  rows={4}
+                  className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm bg-white resize-y min-h-[5rem] whitespace-pre-wrap focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
 

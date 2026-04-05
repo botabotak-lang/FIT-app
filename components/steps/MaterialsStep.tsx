@@ -136,10 +136,6 @@ export default function MaterialsStep({ basicInfo, materials, onMaterialsChange 
         </div>
       </div>
 
-      <div className="flex justify-between items-center">
-        <Button onClick={addMaterial}>+ 材料追加</Button>
-      </div>
-
       <div className="space-y-4">
         {materials.map((material) => (
           <div key={material.id} className="border rounded-lg p-4 space-y-3 relative">
@@ -314,8 +310,16 @@ export default function MaterialsStep({ basicInfo, materials, onMaterialsChange 
         ))}
 
         {materials.length === 0 && (
-          <div className="text-center py-8 text-gray-500">「+ 材料追加」ボタンで材料を追加してください</div>
+          <div className="text-center py-8 text-gray-500">
+            下の「+ 材料追加」から材料を追加してください
+          </div>
         )}
+
+        <div className="flex justify-start pt-1">
+          <Button type="button" onClick={addMaterial} className="w-full sm:w-auto">
+            + 材料追加
+          </Button>
+        </div>
       </div>
 
       {materials.length > 0 && (
