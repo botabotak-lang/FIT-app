@@ -42,6 +42,26 @@ function formatMonthDay(dateStr: string): string {
   return `${d.getMonth() + 1}/${d.getDate()}`;
 }
 
+/** 印刷プレビューと Excel 出力で様式を揃える */
+const WORK_REPORT_TITLE_SPACED = "修 理 作 業 報 告 書";
+
+const WORK_REPORT_TABLE_HEADERS = [
+  "月/日",
+  "移動",
+  "作業内(平日)",
+  "作業外(平日)",
+  "休日",
+  "作業者",
+  "場　所",
+  "作業内容（休憩は先頭に記載）",
+] as const;
+
+function workReportYearLabel(basic: BasicInfo): string {
+  return basic.receptionDate
+    ? toReiwa(basic.receptionDate)
+    : toReiwa(new Date().toISOString().slice(0, 10));
+}
+
 export default function WorkReportStep({
   basicInfo,
   selectedWorkers,
@@ -122,16 +142,9 @@ export default function WorkReportStep({
     const sorted = [...workDayEntries].sort((a, b) =>
       a.date.localeCompare(b.date)
     );
-    const headerRow = [
-      "月/日",
-      "移動",
-      "作業内（平日）",
-      "作業外（平日）",
-      "休日",
-      "作業者",
-      "場所",
-      "作業内容（休憩は先頭に結合）",
-    ];
+    const year = workReportYearLabel(basicInfo);
+    const empty = "　";
+
     const dataRows = sorted.map((e) => [
       formatMonthDay(e.date),
       aggregateRangesForKind(e, "travel"),
@@ -142,27 +155,43 @@ export default function WorkReportStep({
       e.location,
       formatBreaksForContent(e),
     ]);
-    const aoa: (string | number)[][] = [
-      ["修理作業報告書（1枚目）"],
-      ["船名", basicInfo.shipName || ""],
-      ["顧客", basicInfo.customer || ""],
-      ["科目", basicInfo.category || ""],
-      ["型名", basicInfo.modelName || ""],
-      ["製造者", basicInfo.manufacturer || ""],
-      [],
-      headerRow,
-      ...dataRows,
+
+    const blankCount = Math.max(0, 15 - sorted.length);
+    const blankRows = Array.from({ length: blankCount }, () =>
+      Array<string>(8).fill("")
+    );
+
+    /** 印刷の info 行と同じ並び（船名・科目・型名・製造者を8セルで表現） */
+    const infoRow: string[] = [
+      "船名",
+      basicInfo.shipName || empty,
+      "科目",
+      basicInfo.category || empty,
+      "型名",
+      basicInfo.modelName || empty,
+      "製造者",
+      basicInfo.manufacturer || empty,
     ];
+
+    const aoa: (string | number)[][] = [
+      [WORK_REPORT_TITLE_SPACED, "", "", "", "", "", "", year],
+      infoRow,
+      [...WORK_REPORT_TABLE_HEADERS],
+      ...dataRows,
+      ...blankRows,
+    ];
+
     const ws = XLSX.utils.aoa_to_sheet(aoa);
+    ws["!merges"] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 6 } }];
     ws["!cols"] = [
-      { wch: 8 },
-      { wch: 14 },
-      { wch: 14 },
-      { wch: 14 },
+      { wch: 6 },
+      { wch: 12 },
+      { wch: 12 },
+      { wch: 12 },
       { wch: 10 },
       { wch: 8 },
-      { wch: 14 },
-      { wch: 48 },
+      { wch: 12 },
+      { wch: 44 },
     ];
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "作業報告1枚目");
@@ -175,9 +204,7 @@ export default function WorkReportStep({
     const sorted = [...workDayEntries].sort((a, b) =>
       a.date.localeCompare(b.date)
     );
-    const year = basicInfo.receptionDate
-      ? toReiwa(basicInfo.receptionDate)
-      : toReiwa(new Date().toISOString().slice(0, 10));
+    const year = workReportYearLabel(basicInfo);
 
     const rows = sorted
       .map(
@@ -229,7 +256,7 @@ export default function WorkReportStep({
 </style>
 </head><body>
   <div class="page-header">
-    <div class="title">修 理 作 業 報 告 書</div>
+    <div class="title">${WORK_REPORT_TITLE_SPACED}</div>
     <div class="year">${year}</div>
   </div>
   <div class="info-row">
@@ -241,13 +268,13 @@ export default function WorkReportStep({
   <table>
     <thead>
       <tr>
-        <th class="col-date">月/日</th>
-        <th class="col-time">移動</th>
-        <th class="col-time">作業内<br>(平日)</th>
-        <th class="col-time">作業外<br>(平日)</th>
-        <th class="col-time">休日</th>
-        <th class="col-worker">作業者</th>
-        <th class="col-location">場　所</th>
+        <th class="col-date">${WORK_REPORT_TABLE_HEADERS[0]}</th>
+        <th class="col-time">${WORK_REPORT_TABLE_HEADERS[1]}</th>
+        <th class="col-time">${WORK_REPORT_TABLE_HEADERS[2].replace("(平日)", "<br>(平日)")}</th>
+        <th class="col-time">${WORK_REPORT_TABLE_HEADERS[3].replace("(平日)", "<br>(平日)")}</th>
+        <th class="col-time">${WORK_REPORT_TABLE_HEADERS[4]}</th>
+        <th class="col-worker">${WORK_REPORT_TABLE_HEADERS[5]}</th>
+        <th class="col-location">${WORK_REPORT_TABLE_HEADERS[6]}</th>
         <th class="col-content">作　　業　　内　　容<br><span style="font-weight:normal;font-size:9px">（休憩は先頭に記載）</span></th>
       </tr>
     </thead>
