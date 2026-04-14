@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ShipCase, CaseStatus } from "@/lib/types";
 import { getCases, deleteCase } from "@/lib/storage";
-import { Plus, Ship, ChevronDown, ChevronRight, Trash2, FileText } from "lucide-react";
+import { Plus, Ship, ChevronDown, ChevronRight, Trash2, FileText, Package } from "lucide-react";
 
 const STATUS_CONFIG: Record<CaseStatus, { label: string; color: string }> = {
   draft: { label: "作業中", color: "bg-yellow-100 text-yellow-800" },
@@ -63,10 +63,20 @@ export default function HomePage() {
         {/* ヘッダー */}
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-2xl font-bold text-gray-900">修理作業報告</h1>
-          <Button onClick={() => router.push("/case/new")}>
-            <Plus className="w-4 h-4 mr-2" />
-            新規作業
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => router.push("/products")}
+            >
+              <Package className="w-4 h-4 mr-1" />
+              製品マスタ
+            </Button>
+            <Button onClick={() => router.push("/case/new")}>
+              <Plus className="w-4 h-4 mr-2" />
+              新規作業
+            </Button>
+          </div>
         </div>
 
         {/* 検索 */}

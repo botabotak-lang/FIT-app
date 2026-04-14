@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { X } from "lucide-react";
 import { BasicInfo, Material, SUPPLIERS } from "@/lib/types";
-import { PRODUCT_MASTER, Product } from "@/lib/productMaster";
+import { Product, getActiveProducts } from "@/lib/productMaster";
 
 type Props = {
   basicInfo: BasicInfo;
@@ -15,6 +15,7 @@ type Props = {
 };
 
 export default function MaterialsStep({ basicInfo, materials, onMaterialsChange }: Props) {
+  const [masterProducts, setMasterProducts] = useState<Product[]>([]);
   const [productHistory, setProductHistory] = useState<string[]>([]);
   const [openSuggest, setOpenSuggest] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState<{ [key: string]: string }>({});
@@ -22,6 +23,12 @@ export default function MaterialsStep({ basicInfo, materials, onMaterialsChange 
   useEffect(() => {
     const saved = localStorage.getItem("productHistory");
     if (saved) setProductHistory(JSON.parse(saved));
+  }, []);
+
+  useEffect(() => {
+    getActiveProducts()
+      .then(setMasterProducts)
+      .catch(() => setMasterProducts([]));
   }, []);
 
   const addToHistory = (productName: string) => {
@@ -103,7 +110,7 @@ export default function MaterialsStep({ basicInfo, materials, onMaterialsChange 
 
   const getSuggestions = (materialId: string) => {
     const query = searchQuery[materialId] || "";
-    const masterMatches = PRODUCT_MASTER.filter(
+    const masterMatches = masterProducts.filter(
       (p) => !query || p.name.includes(query) || p.modelType.includes(query)
     );
     const historyMatches = productHistory
