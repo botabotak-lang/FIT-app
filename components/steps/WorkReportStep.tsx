@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -12,16 +13,28 @@ import {
   WorkDayEntry,
   TimeBlock,
   TimeBlockKind,
-  WORKERS,
   TIME_BLOCK_LABELS,
 } from "@/lib/types";
 import {
   newTimeBlockId,
   calcBlockHours,
   calcLaborCostForEntry,
-  aggregateRangesForKind,
-  formatBreaksForContent,
 } from "@/lib/workDayEntry";
+import { getActiveEmployees, Employee } from "@/lib/employeeMaster";
+import {
+  WORK_REPORT_TITLE_SPACED,
+  WORK_REPORT_TABLE_HEADERS,
+  workReportYearLabel,
+  sortWorkDayEntries,
+  buildWorkReportInfoRow,
+  buildWorkReportDataRows,
+  buildWorkReportBlankRows,
+  buildWorkReportTitleRow,
+  WORK_REPORT_TITLE_MERGE,
+  WORK_REPORT_EXCEL_COLS,
+  workReportTableHeaderCellsHtml,
+  workReportBodyRowsHtml,
+} from "@/lib/workReportLayout";
 
 type Props = {
   basicInfo: BasicInfo;
@@ -30,45 +43,37 @@ type Props = {
   onWorkDayEntriesChange: (entries: WorkDayEntry[]) => void;
 };
 
-function toReiwa(dateStr: string): string {
-  if (!dateStr) return "";
-  const d = new Date(dateStr);
-  return `令和${d.getFullYear() - 2018}年`;
-}
-
-function formatMonthDay(dateStr: string): string {
-  if (!dateStr) return "";
-  const d = new Date(dateStr);
-  return `${d.getMonth() + 1}/${d.getDate()}`;
-}
-
-/** 印刷プレビューと Excel 出力で様式を揃える */
-const WORK_REPORT_TITLE_SPACED = "修 理 作 業 報 告 書";
-
-const WORK_REPORT_TABLE_HEADERS = [
-  "月/日",
-  "移動",
-  "作業内(平日)",
-  "作業外(平日)",
-  "休日",
-  "作業者",
-  "場　所",
-  "作業内容（休憩は先頭に記載）",
-] as const;
-
-function workReportYearLabel(basic: BasicInfo): string {
-  return basic.receptionDate
-    ? toReiwa(basic.receptionDate)
-    : toReiwa(new Date().toISOString().slice(0, 10));
-}
-
 export default function WorkReportStep({
   basicInfo,
   selectedWorkers,
   workDayEntries,
   onWorkDayEntriesChange,
 }: Props) {
-  const defaultWorker = selectedWorkers[0] || WORKERS[0];
+  const [employees, setEmployees] = useState<Employee[]>([]);
+
+  useEffect(() => {
+    getActiveEmployees()
+      .then(setEmployees)
+      .catch(() => setEmployees([]));
+  }, []);
+
+  const activeWorkerNames = useMemo(
+    () => employees.map((e) => e.name),
+    [employees]
+  );
+
+  const workerOptions = useMemo(() => {
+    const legacy = new Set<string>();
+    workDayEntries.forEach((e) => {
+      if (e.worker && !activeWorkerNames.includes(e.worker)) legacy.add(e.worker);
+    });
+    selectedWorkers.forEach((w) => {
+      if (w && !activeWorkerNames.includes(w)) legacy.add(w);
+    });
+    return [...activeWorkerNames, ...Array.from(legacy)];
+  }, [activeWorkerNames, workDayEntries, selectedWorkers]);
+
+  const defaultWorker = selectedWorkers[0] || activeWorkerNames[0] || "";
 
   const addEntry = () => {
     const today = new Date();
@@ -77,7 +82,7 @@ export default function WorkReportStep({
     const newEntry: WorkDayEntry = {
       id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
       date: dateStr,
-      worker: defaultWorker,
+      worker: defaultWorker || workerOptions[0] || "",
       location: "",
       workContent: "",
       blocks: [],
@@ -139,60 +144,23 @@ export default function WorkReportStep({
   };
 
   const handleExportWorkReportExcel = () => {
-    const sorted = [...workDayEntries].sort((a, b) =>
-      a.date.localeCompare(b.date)
-    );
+    const sorted = sortWorkDayEntries(workDayEntries);
     const year = workReportYearLabel(basicInfo);
-    const empty = "　";
-
-    const dataRows = sorted.map((e) => [
-      formatMonthDay(e.date),
-      aggregateRangesForKind(e, "travel"),
-      aggregateRangesForKind(e, "regular"),
-      aggregateRangesForKind(e, "overtime"),
-      aggregateRangesForKind(e, "holiday"),
-      e.worker,
-      e.location,
-      formatBreaksForContent(e),
-    ]);
-
-    const blankCount = Math.max(0, 15 - sorted.length);
-    const blankRows = Array.from({ length: blankCount }, () =>
-      Array<string>(8).fill("")
-    );
-
-    /** 印刷の info 行と同じ並び（船名・科目・型名・製造者を8セルで表現） */
-    const infoRow: string[] = [
-      "船名",
-      basicInfo.shipName || empty,
-      "科目",
-      basicInfo.category || empty,
-      "型名",
-      basicInfo.modelName || empty,
-      "製造者",
-      basicInfo.manufacturer || empty,
-    ];
-
+    const dataRows = buildWorkReportDataRows(sorted);
+    const blankRows = buildWorkReportBlankRows(sorted.length);
     const aoa: (string | number)[][] = [
-      [WORK_REPORT_TITLE_SPACED, "", "", "", "", "", "", year],
-      infoRow,
+      buildWorkReportTitleRow(year),
+      buildWorkReportInfoRow(basicInfo),
       [...WORK_REPORT_TABLE_HEADERS],
       ...dataRows,
       ...blankRows,
     ];
 
     const ws = XLSX.utils.aoa_to_sheet(aoa);
-    ws["!merges"] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 6 } }];
-    ws["!cols"] = [
-      { wch: 6 },
-      { wch: 12 },
-      { wch: 12 },
-      { wch: 12 },
-      { wch: 10 },
-      { wch: 8 },
-      { wch: 12 },
-      { wch: 44 },
+    ws["!merges"] = [
+      { s: WORK_REPORT_TITLE_MERGE.s, e: WORK_REPORT_TITLE_MERGE.e },
     ];
+    ws["!cols"] = WORK_REPORT_EXCEL_COLS;
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "作業報告1枚目");
     const stamp = new Date().toISOString().slice(0, 10);
@@ -201,33 +169,9 @@ export default function WorkReportStep({
   };
 
   const handlePrint = () => {
-    const sorted = [...workDayEntries].sort((a, b) =>
-      a.date.localeCompare(b.date)
-    );
+    const sorted = sortWorkDayEntries(workDayEntries);
     const year = workReportYearLabel(basicInfo);
-
-    const rows = sorted
-      .map(
-        (e) => `
-      <tr>
-        <td class="center">${formatMonthDay(e.date)}</td>
-        <td class="center">${aggregateRangesForKind(e, "travel")}</td>
-        <td class="center">${aggregateRangesForKind(e, "regular")}</td>
-        <td class="center">${aggregateRangesForKind(e, "overtime")}</td>
-        <td class="center">${aggregateRangesForKind(e, "holiday")}</td>
-        <td class="center">${e.worker}</td>
-        <td class="center">${e.location}</td>
-        <td class="work-content">${formatBreaksForContent(e)}</td>
-      </tr>`
-      )
-      .join("");
-
-    const blankRows = Math.max(0, 15 - sorted.length);
-    const blanks = Array(blankRows)
-      .fill(
-        `<tr><td>&nbsp;</td><td></td><td></td><td></td><td></td><td></td><td></td><td class="work-content"></td></tr>`
-      )
-      .join("");
+    const bodyHtml = workReportBodyRowsHtml(sorted);
 
     const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
 <title>修理作業報告書</title>
@@ -267,20 +211,10 @@ export default function WorkReportStep({
   </div>
   <table>
     <thead>
-      <tr>
-        <th class="col-date">${WORK_REPORT_TABLE_HEADERS[0]}</th>
-        <th class="col-time">${WORK_REPORT_TABLE_HEADERS[1]}</th>
-        <th class="col-time">${WORK_REPORT_TABLE_HEADERS[2].replace("(平日)", "<br>(平日)")}</th>
-        <th class="col-time">${WORK_REPORT_TABLE_HEADERS[3].replace("(平日)", "<br>(平日)")}</th>
-        <th class="col-time">${WORK_REPORT_TABLE_HEADERS[4]}</th>
-        <th class="col-worker">${WORK_REPORT_TABLE_HEADERS[5]}</th>
-        <th class="col-location">${WORK_REPORT_TABLE_HEADERS[6]}</th>
-        <th class="col-content">作　　業　　内　　容<br><span style="font-weight:normal;font-size:9px">（休憩は先頭に記載）</span></th>
-      </tr>
+      ${workReportTableHeaderCellsHtml()}
     </thead>
     <tbody>
-      ${rows}
-      ${blanks}
+      ${bodyHtml}
     </tbody>
   </table>
 </body></html>`;
@@ -361,15 +295,16 @@ export default function WorkReportStep({
                   <Label className="text-xs text-gray-600">作業者</Label>
                   <Select
                     value={entry.worker}
-                    onValueChange={(v) => updateEntry(entry.id, { worker: v as Worker })}
+                    onValueChange={(v) => updateEntry(entry.id, { worker: v })}
                   >
                     <SelectTrigger className="bg-white">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {WORKERS.map((w) => (
+                      {workerOptions.map((w) => (
                         <SelectItem key={w} value={w}>
                           {w}
+                          {!activeWorkerNames.includes(w) ? "（マスタ外）" : ""}
                         </SelectItem>
                       ))}
                     </SelectContent>

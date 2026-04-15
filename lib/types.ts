@@ -1,4 +1,5 @@
-export type Worker = "大竹" | "豊島" | "鈴木" | "内田" | "新人";
+/** 作業者名（社員マスタと一致させる。旧データは任意文字列のまま） */
+export type Worker = string;
 
 export type BasicInfo = {
   customer: string;
@@ -63,8 +64,6 @@ export type DocumentType = "estimate" | "invoice";
 export const REGULAR_RATE = 7000;
 export const HOLIDAY_RATE = 8400;
 export const TRAVEL_RATE = 0.8;
-
-export const WORKERS: Worker[] = ["大竹", "豊島", "鈴木", "内田", "新人"];
 
 export type CaseStatus = "draft" | "materials_added" | "invoiced";
 

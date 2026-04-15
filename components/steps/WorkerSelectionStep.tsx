@@ -1,10 +1,9 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
-
-type Worker = "大竹" | "豊島" | "鈴木" | "内田" | "新人";
-
-const WORKERS: Worker[] = ["大竹", "豊島", "鈴木", "内田", "新人"];
+import type { Worker } from "@/lib/types";
+import { getActiveEmployees, Employee } from "@/lib/employeeMaster";
 
 type Props = {
   selectedWorkers: Worker[];
@@ -12,6 +11,16 @@ type Props = {
 };
 
 export default function WorkerSelectionStep({ selectedWorkers, setSelectedWorkers }: Props) {
+  const [employees, setEmployees] = useState<Employee[]>([]);
+
+  useEffect(() => {
+    getActiveEmployees()
+      .then(setEmployees)
+      .catch(() => setEmployees([]));
+  }, []);
+
+  const activeNames = employees.map((e) => e.name);
+
   const toggleWorker = (worker: Worker) => {
     if (selectedWorkers.includes(worker)) {
       setSelectedWorkers(selectedWorkers.filter((w) => w !== worker));
@@ -19,6 +28,8 @@ export default function WorkerSelectionStep({ selectedWorkers, setSelectedWorker
       setSelectedWorkers([...selectedWorkers, worker]);
     }
   };
+
+  const legacySelected = selectedWorkers.filter((w) => !activeNames.includes(w));
 
   return (
     <div className="space-y-6">
@@ -30,15 +41,29 @@ export default function WorkerSelectionStep({ selectedWorkers, setSelectedWorker
       </div>
 
       <div className="flex flex-wrap gap-3">
-        {WORKERS.map((worker) => (
+        {employees.map((emp) => (
           <Button
-            key={worker}
-            onClick={() => toggleWorker(worker)}
-            variant={selectedWorkers.includes(worker) ? "default" : "outline"}
+            key={emp.id}
+            type="button"
+            onClick={() => toggleWorker(emp.name)}
+            variant={selectedWorkers.includes(emp.name) ? "default" : "outline"}
             size="lg"
             className="min-w-[100px]"
           >
-            {worker}
+            {emp.name}
+          </Button>
+        ))}
+        {legacySelected.map((name) => (
+          <Button
+            key={`legacy-${name}`}
+            type="button"
+            onClick={() => toggleWorker(name)}
+            variant={selectedWorkers.includes(name) ? "default" : "outline"}
+            size="lg"
+            className="min-w-[100px] border-amber-300"
+          >
+            {name}
+            <span className="text-xs font-normal ml-1 opacity-80">（マスタ外）</span>
           </Button>
         ))}
       </div>
@@ -53,9 +78,7 @@ export default function WorkerSelectionStep({ selectedWorkers, setSelectedWorker
 
       {selectedWorkers.length === 0 && (
         <div className="bg-yellow-50 p-4 rounded-lg">
-          <p className="text-sm text-yellow-800">
-            ⚠️ 作業者を1名以上選択してください
-          </p>
+          <p className="text-sm text-yellow-800">作業者を1名以上選択してください</p>
         </div>
       )}
     </div>

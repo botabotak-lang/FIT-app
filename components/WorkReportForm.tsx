@@ -7,7 +7,6 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { X } from "lucide-react";
 
-type Worker = "大竹" | "豊島" | "鈴木" | "内田" | "新人";
 type TimeCategory = "regular" | "overtime" | "holiday" | "travel";
 
 type TimeSlot = {
@@ -16,11 +15,12 @@ type TimeSlot = {
   category: TimeCategory; // 時間区分（排他選択）
 };
 
-type WorkerTime = {
-  [key in Worker]: TimeSlot[];
-};
+/** レガシー画面用（ウィザードの社員マスタとは別の固定5名） */
+const LEGACY_WORKER_NAMES = ["大竹", "豊島", "鈴木"] as const;
 
-const WORKERS: Worker[] = ["大竹", "豊島", "鈴木", "内田", "新人"];
+type WorkerTime = Record<string, TimeSlot[]>;
+
+const WORKERS: string[] = [...LEGACY_WORKER_NAMES];
 const CUSTOMERS = ["東海汽船", "清水港運", "焼津漁協", "鈴与海運", "その他"];
 const REGULAR_RATE = 7000; // 平日単価
 const HOLIDAY_RATE = 8400; // 休日単価
@@ -41,18 +41,18 @@ export default function WorkReportForm() {
   const [completionDate, setCompletionDate] = useState("");
   
   // 選択された作業者
-  const [selectedWorkers, setSelectedWorkers] = useState<Worker[]>([]);
-  
+  const [selectedWorkers, setSelectedWorkers] = useState<string[]>([]);
+
   const [workerTimes, setWorkerTimes] = useState<WorkerTime>(() => {
-    const initial: Partial<WorkerTime> = {};
-    WORKERS.forEach(worker => {
+    const initial: WorkerTime = {};
+    WORKERS.forEach((worker) => {
       initial[worker] = [{ startTime: "", endTime: "", category: "regular" }];
     });
-    return initial as WorkerTime;
+    return initial;
   });
 
   // 作業者の選択/解除
-  const toggleWorker = (worker: Worker) => {
+  const toggleWorker = (worker: string) => {
     if (selectedWorkers.includes(worker)) {
       setSelectedWorkers(selectedWorkers.filter(w => w !== worker));
     } else {
@@ -71,7 +71,7 @@ export default function WorkReportForm() {
   };
 
   // 作業者ごとの集計
-  const calculateWorkerStats = (worker: Worker) => {
+  const calculateWorkerStats = (worker: string) => {
     const slots = workerTimes[worker];
     let travelHours = 0;
     let regularHours = 0;
@@ -121,7 +121,7 @@ export default function WorkReportForm() {
   };
 
   // タイムスロット追加
-  const addTimeSlot = (worker: Worker) => {
+  const addTimeSlot = (worker: string) => {
     setWorkerTimes(prev => ({
       ...prev,
       [worker]: [...prev[worker], { startTime: "", endTime: "", category: "regular" }]
@@ -129,7 +129,7 @@ export default function WorkReportForm() {
   };
 
   // タイムスロット削除
-  const removeTimeSlot = (worker: Worker, index: number) => {
+  const removeTimeSlot = (worker: string, index: number) => {
     setWorkerTimes(prev => ({
       ...prev,
       [worker]: prev[worker].filter((_, i) => i !== index)
@@ -137,7 +137,7 @@ export default function WorkReportForm() {
   };
 
   // タイムスロット更新
-  const updateTimeSlot = (worker: Worker, index: number, field: keyof TimeSlot, value: any) => {
+  const updateTimeSlot = (worker: string, index: number, field: keyof TimeSlot, value: string) => {
     setWorkerTimes(prev => ({
       ...prev,
       [worker]: prev[worker].map((slot, i) => 
