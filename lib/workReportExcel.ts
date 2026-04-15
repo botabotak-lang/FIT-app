@@ -60,6 +60,23 @@ function styleTableHeaderCell(cell: ExcelJS.Cell, colIndex: number): void {
   };
 }
 
+/** H 列幅（文字幅）と本文から行高ポイントを推定（改行・折り返し想定） */
+function estimateBodyRowHeightPts(
+  workContent: string,
+  columnWidthChars: number
+): number {
+  const w = Math.max(8, columnWidthChars);
+  const charsPerLine = Math.max(8, Math.floor(w * 0.75));
+  const parts =
+    workContent.length === 0 ? [""] : workContent.split("\n");
+  let displayLines = 0;
+  for (const part of parts) {
+    const len = part.length;
+    displayLines += Math.max(1, Math.ceil(len / charsPerLine));
+  }
+  return Math.min(409, Math.max(18, 6 + displayLines * 13));
+}
+
 function styleBodyCell(cell: ExcelJS.Cell, colIndex: number): void {
   cell.border = {
     top: thin,
@@ -216,6 +233,9 @@ export async function downloadWorkReportExcel(
   });
   ws.getRow(TABLE_HEADER_ROW).height = 36;
 
+  const contentColWidth =
+    typeof ws.getColumn(8).width === "number" ? ws.getColumn(8).width! : 66;
+
   bodyRows.forEach((row, ri) => {
     const r = DATA_START_ROW + ri;
     row.forEach((val, ci) => {
@@ -223,7 +243,11 @@ export async function downloadWorkReportExcel(
       cell.value = val;
       styleBodyCell(cell, ci);
     });
-    ws.getRow(r).height = 18;
+    const workContent = String(row[7] ?? "");
+    const isBlankRow = row.every((c) => c === "");
+    ws.getRow(r).height = isBlankRow
+      ? 18
+      : estimateBodyRowHeightPts(workContent, contentColWidth);
   });
 
   const buffer = await wb.xlsx.writeBuffer();

@@ -90,16 +90,16 @@ export const WORK_REPORT_TITLE_MERGE = {
   e: { r: 0, c: 6 },
 } as const;
 
-/** Excel 用列幅（印刷の列比率に近い） */
+/** Excel 用列幅（印刷の .col-content 57% に寄せて H 列を広く） */
 export const WORK_REPORT_EXCEL_COLS = [
   { wch: 6 },
-  { wch: 12 },
-  { wch: 12 },
-  { wch: 12 },
-  { wch: 10 },
+  { wch: 11 },
+  { wch: 11 },
+  { wch: 11 },
+  { wch: 9 },
   { wch: 8 },
-  { wch: 12 },
-  { wch: 44 },
+  { wch: 11 },
+  { wch: 66 },
 ];
 
 /** 印刷用テーブルヘッダー HTML（th 内） */
