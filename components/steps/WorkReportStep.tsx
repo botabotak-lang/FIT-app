@@ -6,7 +6,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Trash2, Printer, Plus, FileSpreadsheet } from "lucide-react";
-import * as XLSX from "xlsx";
 import {
   BasicInfo,
   Worker,
@@ -23,18 +22,12 @@ import {
 import { getActiveEmployees, Employee } from "@/lib/employeeMaster";
 import {
   WORK_REPORT_TITLE_SPACED,
-  WORK_REPORT_TABLE_HEADERS,
   workReportYearLabel,
   sortWorkDayEntries,
-  buildWorkReportInfoRow,
-  buildWorkReportDataRows,
-  buildWorkReportBlankRows,
-  buildWorkReportTitleRow,
-  WORK_REPORT_TITLE_MERGE,
-  WORK_REPORT_EXCEL_COLS,
   workReportTableHeaderCellsHtml,
   workReportBodyRowsHtml,
 } from "@/lib/workReportLayout";
+import { downloadWorkReportExcel } from "@/lib/workReportExcel";
 
 type Props = {
   basicInfo: BasicInfo;
@@ -143,29 +136,9 @@ export default function WorkReportStep({
     );
   };
 
-  const handleExportWorkReportExcel = () => {
+  const handleExportWorkReportExcel = async () => {
     const sorted = sortWorkDayEntries(workDayEntries);
-    const year = workReportYearLabel(basicInfo);
-    const dataRows = buildWorkReportDataRows(sorted);
-    const blankRows = buildWorkReportBlankRows(sorted.length);
-    const aoa: (string | number)[][] = [
-      buildWorkReportTitleRow(year),
-      buildWorkReportInfoRow(basicInfo),
-      [...WORK_REPORT_TABLE_HEADERS],
-      ...dataRows,
-      ...blankRows,
-    ];
-
-    const ws = XLSX.utils.aoa_to_sheet(aoa);
-    ws["!merges"] = [
-      { s: WORK_REPORT_TITLE_MERGE.s, e: WORK_REPORT_TITLE_MERGE.e },
-    ];
-    ws["!cols"] = WORK_REPORT_EXCEL_COLS;
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "作業報告1枚目");
-    const stamp = new Date().toISOString().slice(0, 10);
-    const safeShip = (basicInfo.shipName || "案件").replace(/[/\\?*[\]:]/g, "_");
-    XLSX.writeFile(wb, `修理作業報告1枚目_${safeShip}_${stamp}.xlsx`);
+    await downloadWorkReportExcel(basicInfo, sorted);
   };
 
   const handlePrint = () => {
