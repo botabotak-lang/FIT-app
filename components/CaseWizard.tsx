@@ -16,7 +16,7 @@ import {
   ShipCase,
   CaseStatus,
 } from "@/lib/types";
-import { saveCase } from "@/lib/storage";
+import { upsertCase, isSupabaseConfigured } from "@/lib/caseRepository";
 import { ArrowLeft, Save } from "lucide-react";
 
 const TOTAL_STEPS = 5;
@@ -55,6 +55,8 @@ export default function CaseWizard({ initialCase }: Props) {
     initialCase?.materials ?? []
   );
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const caseId = initialCase?.id ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`;
   const createdAt = initialCase?.createdAt ?? new Date().toISOString();
@@ -75,19 +77,46 @@ export default function CaseWizard({ initialCase }: Props) {
     materials,
   });
 
-  const handleSave = (exit = false) => {
-    saveCase(buildCase());
-    if (exit) {
-      router.push("/");
-    } else {
-      setSaveMessage("保存しました");
-      setTimeout(() => setSaveMessage(null), 2000);
+  const handleSave = async (exit = false) => {
+    if (!isSupabaseConfigured()) {
+      setSaveError(
+        "Supabase が未設定です。NEXT_PUBLIC_SUPABASE_URL と NEXT_PUBLIC_SUPABASE_ANON_KEY を設定してください。"
+      );
+      return;
+    }
+    setSaveError(null);
+    setSaving(true);
+    try {
+      await upsertCase(buildCase());
+      if (exit) {
+        router.push("/");
+      } else {
+        setSaveMessage("保存しました");
+        setTimeout(() => setSaveMessage(null), 2000);
+      }
+    } catch (e) {
+      setSaveError(e instanceof Error ? e.message : "保存に失敗しました");
+    } finally {
+      setSaving(false);
     }
   };
 
-  const handleMarkInvoiced = () => {
-    saveCase(buildCase("invoiced"));
-    router.push("/");
+  const handleMarkInvoiced = async () => {
+    if (!isSupabaseConfigured()) {
+      setSaveError(
+        "Supabase が未設定です。NEXT_PUBLIC_SUPABASE_URL と NEXT_PUBLIC_SUPABASE_ANON_KEY を設定してください。"
+      );
+      return;
+    }
+    setSaveError(null);
+    setSaving(true);
+    try {
+      await upsertCase(buildCase("invoiced"));
+      router.push("/");
+    } catch (e) {
+      setSaveError(e instanceof Error ? e.message : "保存に失敗しました");
+      setSaving(false);
+    }
   };
 
   const canProceed = () => {
@@ -143,8 +172,10 @@ export default function CaseWizard({ initialCase }: Props) {
         {/* ヘッダー */}
         <div className="flex items-center gap-3 mb-6">
           <button
-            onClick={() => handleSave(true)}
-            className="flex items-center gap-1 text-gray-600 hover:text-gray-900 p-2 rounded-lg hover:bg-gray-100"
+            type="button"
+            onClick={() => void handleSave(true)}
+            disabled={saving}
+            className="flex items-center gap-1 text-gray-600 hover:text-gray-900 p-2 rounded-lg hover:bg-gray-100 disabled:opacity-50"
             title="保存して一覧に戻る"
           >
             <ArrowLeft className="w-5 h-5" />
@@ -155,9 +186,19 @@ export default function CaseWizard({ initialCase }: Props) {
           {saveMessage && (
             <span className="text-sm text-green-600 font-medium">{saveMessage}</span>
           )}
-          <Button variant="outline" size="sm" onClick={() => handleSave(false)}>
+          {saveError && (
+            <span className="text-sm text-red-600 font-medium max-w-[200px] truncate" title={saveError}>
+              {saveError}
+            </span>
+          )}
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={saving}
+            onClick={() => void handleSave(false)}
+          >
             <Save className="w-4 h-4 mr-1" />
-            保存
+            {saving ? "保存中..." : "保存"}
           </Button>
         </div>
 
@@ -219,7 +260,8 @@ export default function CaseWizard({ initialCase }: Props) {
           ) : (
             <Button
               className="flex-1 bg-green-600 hover:bg-green-700"
-              onClick={handleMarkInvoiced}
+              disabled={saving}
+              onClick={() => void handleMarkInvoiced()}
             >
               ✅ 請求完了にして終了
             </Button>
@@ -229,7 +271,12 @@ export default function CaseWizard({ initialCase }: Props) {
         {/* 途中保存ボタン（step 3以降） */}
         {currentStep >= 3 && (
           <div className="mt-3">
-            <Button variant="outline" className="w-full" onClick={() => handleSave(true)}>
+            <Button
+              variant="outline"
+              className="w-full"
+              disabled={saving}
+              onClick={() => void handleSave(true)}
+            >
               💾 保存して一覧に戻る
             </Button>
           </div>

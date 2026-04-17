@@ -22,7 +22,14 @@ export default function MaterialsStep({ basicInfo, materials, onMaterialsChange 
 
   useEffect(() => {
     const saved = localStorage.getItem("productHistory");
-    if (saved) setProductHistory(JSON.parse(saved));
+    if (!saved) return;
+    queueMicrotask(() => {
+      try {
+        setProductHistory(JSON.parse(saved) as string[]);
+      } catch {
+        setProductHistory([]);
+      }
+    });
   }, []);
 
   useEffect(() => {

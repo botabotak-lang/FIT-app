@@ -37,14 +37,19 @@ export default function MaterialsForm() {
   const [modelName, setModelName] = useState("");
   const [completionDate, setCompletionDate] = useState("");
   
-  // LocalStorageから商品名履歴を取得
+  // LocalStorageから商品名履歴を取得（effect 内の同期 setState を避ける）
   const [productHistory, setProductHistory] = useState<string[]>([]);
-  
+
   useEffect(() => {
     const saved = localStorage.getItem("productHistory");
-    if (saved) {
-      setProductHistory(JSON.parse(saved));
-    }
+    if (!saved) return;
+    queueMicrotask(() => {
+      try {
+        setProductHistory(JSON.parse(saved) as string[]);
+      } catch {
+        setProductHistory([]);
+      }
+    });
   }, []);
 
   // 商品名履歴を保存
@@ -81,7 +86,7 @@ export default function MaterialsForm() {
   };
 
   // 材料データ更新
-  const updateMaterial = (id: string, field: keyof Material, value: any) => {
+  const updateMaterial = <K extends keyof Material>(id: string, field: K, value: Material[K]) => {
     setMaterials(materials.map(m => {
       if (m.id !== id) return m;
       
@@ -96,7 +101,7 @@ export default function MaterialsForm() {
       }
       
       // 商品名が確定したら履歴に追加
-      if (field === "productName" && value) {
+      if (field === "productName" && typeof value === "string" && value) {
         addToHistory(value);
       }
       

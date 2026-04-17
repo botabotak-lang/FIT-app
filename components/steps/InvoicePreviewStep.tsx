@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { FileText, FileSpreadsheet, Download } from "lucide-react";
+import { FileText, FileSpreadsheet } from "lucide-react";
 import {
   BasicInfo,
   WorkDayEntry,

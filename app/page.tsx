@@ -1,11 +1,16 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ShipCase, CaseStatus } from "@/lib/types";
-import { getCases, deleteCase } from "@/lib/storage";
+import {
+  listCases,
+  deleteShipCase,
+  isSupabaseConfigured,
+} from "@/lib/caseRepository";
+import LocalCasesImportBanner from "@/components/LocalCasesImportBanner";
 import { Plus, Ship, ChevronDown, ChevronRight, Trash2, FileText, Package, Building2, Users } from "lucide-react";
 
 const STATUS_CONFIG: Record<CaseStatus, { label: string; color: string }> = {
@@ -19,16 +24,41 @@ export default function HomePage() {
   const [cases, setCases] = useState<ShipCase[]>([]);
   const [search, setSearch] = useState("");
   const [expandedShips, setExpandedShips] = useState<Set<string>>(new Set());
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
-  useEffect(() => {
-    setCases(getCases());
+  const refreshCases = useCallback(async () => {
+    if (!isSupabaseConfigured()) {
+      setLoadError(
+        "Supabase が未設定です。.env.local に NEXT_PUBLIC_SUPABASE_URL と NEXT_PUBLIC_SUPABASE_ANON_KEY を設定してください。"
+      );
+      setLoading(false);
+      return;
+    }
+    setLoadError(null);
+    try {
+      const list = await listCases();
+      setCases(list);
+    } catch (e) {
+      setLoadError(e instanceof Error ? e.message : "一覧の読み込みに失敗しました");
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
-  const handleDelete = (id: string, e: React.MouseEvent) => {
+  useEffect(() => {
+    void refreshCases();
+  }, [refreshCases]);
+
+  const handleDelete = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
     if (!confirm("この案件を削除しますか？")) return;
-    deleteCase(id);
-    setCases(getCases());
+    try {
+      await deleteShipCase(id);
+      await refreshCases();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "削除に失敗しました");
+    }
   };
 
   const toggleShip = (shipName: string) => {
@@ -56,6 +86,24 @@ export default function HomePage() {
         c.basicInfo.customer.toLowerCase().includes(search.toLowerCase())
       )
   );
+
+  if (loading) {
+    return (
+      <main className="min-h-screen bg-gray-50 p-4 flex items-center justify-center text-gray-500">
+        読み込み中...
+      </main>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <main className="min-h-screen bg-gray-50 p-4">
+        <div className="max-w-2xl mx-auto rounded-lg border border-amber-200 bg-amber-50 p-4 text-amber-900 text-sm">
+          {loadError}
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main className="min-h-screen bg-gray-50 p-4">
@@ -94,6 +142,8 @@ export default function HomePage() {
             </Button>
           </div>
         </div>
+
+        <LocalCasesImportBanner onImported={() => void refreshCases()} />
 
         {/* 検索 */}
         <Input
@@ -190,7 +240,7 @@ export default function HomePage() {
                                 {cfg.label}
                               </span>
                               <button
-                                onClick={(e) => handleDelete(c.id, e)}
+                                onClick={(e) => void handleDelete(c.id, e)}
                                 className="p-1 text-gray-400 hover:text-red-500 transition-colors"
                                 aria-label="削除"
                               >

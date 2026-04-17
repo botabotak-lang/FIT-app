@@ -3,7 +3,7 @@
 import { useState, useRef } from "react";
 import * as XLSX from "xlsx";
 import { Button } from "@/components/ui/button";
-import { Download, Upload, CheckCircle, AlertCircle } from "lucide-react";
+import { Download, Upload, CheckCircle } from "lucide-react";
 import { ProductInput, upsertProducts, UpsertResult } from "@/lib/productMaster";
 import { SUPPLIERS } from "@/lib/types";
 
