@@ -174,22 +174,20 @@ export async function downloadWorkReportExcel(
   shipLabel.alignment = labelAlign;
   shipLabel.border = borderAll;
 
-  ws.mergeCells(INFO_LABEL_ROW, 3, INFO_LABEL_ROW, 4);
+  ws.mergeCells(INFO_LABEL_ROW, 3, INFO_LABEL_ROW, 6);
   const catLabel = ws.getCell(INFO_LABEL_ROW, 3);
   catLabel.value = "科目";
   catLabel.font = labelFont;
   catLabel.alignment = labelAlign;
   catLabel.border = borderAll;
 
-  ws.mergeCells(INFO_LABEL_ROW, 5, INFO_LABEL_ROW, 6);
-  const modelLabel = ws.getCell(INFO_LABEL_ROW, 5);
+  const modelLabel = ws.getCell(INFO_LABEL_ROW, 7);
   modelLabel.value = "型名";
   modelLabel.font = labelFont;
   modelLabel.alignment = labelAlign;
   modelLabel.border = borderAll;
 
-  ws.mergeCells(INFO_LABEL_ROW, 7, INFO_LABEL_ROW, 8);
-  const mfgLabel = ws.getCell(INFO_LABEL_ROW, 7);
+  const mfgLabel = ws.getCell(INFO_LABEL_ROW, 8);
   mfgLabel.value = "製造者";
   mfgLabel.font = labelFont;
   mfgLabel.alignment = labelAlign;
@@ -202,22 +200,20 @@ export async function downloadWorkReportExcel(
   shipVal.alignment = valueAlign;
   shipVal.border = borderAll;
 
-  ws.mergeCells(INFO_VALUE_ROW, 3, INFO_VALUE_ROW, 4);
+  ws.mergeCells(INFO_VALUE_ROW, 3, INFO_VALUE_ROW, 6);
   const catVal = ws.getCell(INFO_VALUE_ROW, 3);
   catVal.value = category;
   catVal.font = valueFont;
   catVal.alignment = valueAlign;
   catVal.border = borderAll;
 
-  ws.mergeCells(INFO_VALUE_ROW, 5, INFO_VALUE_ROW, 6);
-  const modelVal = ws.getCell(INFO_VALUE_ROW, 5);
+  const modelVal = ws.getCell(INFO_VALUE_ROW, 7);
   modelVal.value = model;
   modelVal.font = valueFont;
   modelVal.alignment = valueAlign;
   modelVal.border = borderAll;
 
-  ws.mergeCells(INFO_VALUE_ROW, 7, INFO_VALUE_ROW, 8);
-  const mfgVal = ws.getCell(INFO_VALUE_ROW, 7);
+  const mfgVal = ws.getCell(INFO_VALUE_ROW, 8);
   mfgVal.value = manufacturer;
   mfgVal.font = valueFont;
   mfgVal.alignment = valueAlign;
