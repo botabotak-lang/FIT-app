@@ -132,7 +132,7 @@ export async function downloadWorkReportExcel(
   const titleCell = ws.getCell(TITLE_ROW, 1);
   titleCell.value = WORK_REPORT_TITLE_SPACED;
   titleCell.font = { bold: true, size: 20, name: "MS PGothic" };
-  titleCell.alignment = { horizontal: "center", vertical: "middle" };
+  titleCell.alignment = { horizontal: "left", vertical: "middle" };
   titleCell.border = borderAll;
 
   const yearCell = ws.getCell(TITLE_ROW, 8);
@@ -255,8 +255,13 @@ export async function downloadWorkReportExcel(
   ws.pageSetup.paperSize = 9; // A4
   ws.pageSetup.orientation = "landscape";
   ws.pageSetup.blackAndWhite = true;
-  ws.pageSetup.printTitlesRow = "$1:$4";
+  ws.pageSetup.printTitlesRow = "$4:$4";
   ws.pageSetup.fitToPage = false;
+  ws.pageSetup.margins = {
+    top: 0.354, bottom: 0.354,
+    left: 0.512, right: 0.512,
+    header: 0.2, footer: 0.2,
+  };
 
   const buffer = await wb.xlsx.writeBuffer();
   const blob = new Blob([buffer], {

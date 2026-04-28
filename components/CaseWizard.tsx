@@ -4,13 +4,11 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import BasicInfoStep from "@/components/steps/BasicInfoStep";
-import WorkerSelectionStep from "@/components/steps/WorkerSelectionStep";
 import WorkReportStep from "@/components/steps/WorkReportStep";
 import MaterialsStep from "@/components/steps/MaterialsStep";
 import InvoicePreviewStep from "@/components/steps/InvoicePreviewStep";
 import {
   BasicInfo,
-  Worker,
   WorkDayEntry,
   Material,
   ShipCase,
@@ -19,10 +17,9 @@ import {
 import { upsertCase, isSupabaseConfigured } from "@/lib/caseRepository";
 import { ArrowLeft, Save } from "lucide-react";
 
-const TOTAL_STEPS = 5;
+const TOTAL_STEPS = 4;
 const STEP_TITLES = [
   "基本情報の入力",
-  "作業者の選択",
   "作業報告書の入力",
   "材料持出表の入力",
   "見積書・請求書の確認",
@@ -44,9 +41,6 @@ export default function CaseWizard({ initialCase }: Props) {
       manufacturer: "",
       receptionDate: "",
     }
-  );
-  const [selectedWorkers, setSelectedWorkers] = useState<Worker[]>(
-    initialCase?.selectedWorkers ?? []
   );
   const [workDayEntries, setWorkDayEntries] = useState<WorkDayEntry[]>(
     initialCase?.workDayEntries ?? []
@@ -72,7 +66,7 @@ export default function CaseWizard({ initialCase }: Props) {
     updatedAt: new Date().toISOString(),
     status: status ?? getCurrentStatus(),
     basicInfo,
-    selectedWorkers,
+    selectedWorkers: initialCase?.selectedWorkers ?? [],
     workDayEntries,
     materials,
   });
@@ -121,7 +115,6 @@ export default function CaseWizard({ initialCase }: Props) {
 
   const canProceed = () => {
     if (currentStep === 1) return !!(basicInfo.customer && basicInfo.shipName);
-    if (currentStep === 2) return selectedWorkers.length > 0;
     return true;
   };
 
@@ -131,21 +124,14 @@ export default function CaseWizard({ initialCase }: Props) {
         return <BasicInfoStep basicInfo={basicInfo} setBasicInfo={setBasicInfo} />;
       case 2:
         return (
-          <WorkerSelectionStep
-            selectedWorkers={selectedWorkers}
-            setSelectedWorkers={setSelectedWorkers}
-          />
-        );
-      case 3:
-        return (
           <WorkReportStep
             basicInfo={basicInfo}
-            selectedWorkers={selectedWorkers}
+            selectedWorkers={[]}
             workDayEntries={workDayEntries}
             onWorkDayEntriesChange={setWorkDayEntries}
           />
         );
-      case 4:
+      case 3:
         return (
           <MaterialsStep
             basicInfo={basicInfo}
@@ -153,7 +139,7 @@ export default function CaseWizard({ initialCase }: Props) {
             onMaterialsChange={setMaterials}
           />
         );
-      case 5:
+      case 4:
         return (
           <InvoicePreviewStep
             basicInfo={basicInfo}

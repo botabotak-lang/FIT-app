@@ -151,11 +151,11 @@ export default function WorkReportStep({
     const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
 <title>修理作業報告書</title>
 <style>
-  @page { size: A4 landscape; margin: 10mm 8mm; }
+  @page { size: A4 landscape; margin: 9mm 13mm; }
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body { font-family: "MS PGothic","Hiragino Kaku Gothic ProN","Meiryo",sans-serif; padding: 10px; font-size: 11px; color: #000; }
   .page-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 6px; }
-  .title { font-size: 20px; font-weight: bold; letter-spacing: 8px; }
+  .title { font-size: 20px; font-weight: bold; letter-spacing: 8px; text-align: left; }
   .year { font-size: 12px; }
   .info-row { display: flex; gap: 0; border: 1px solid #000; border-bottom: none; }
   .info-cell { border-right: 1px solid #000; padding: 3px 6px; }
