@@ -66,7 +66,7 @@ export function buildWorkReportDataRows(sorted: WorkDayEntry[]): string[][] {
     aggregateRangesForKind(e, "regular"),
     aggregateRangesForKind(e, "overtime"),
     aggregateRangesForKind(e, "holiday"),
-    e.worker,
+    (e.workers ?? []).join("、"),
     e.location,
     formatBreaksForContent(e),
   ]);

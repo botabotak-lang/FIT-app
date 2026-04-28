@@ -36,7 +36,8 @@ export const TIME_BLOCK_LABELS: Record<TimeBlockKind, string> = {
 export type WorkDayEntry = {
   id: string;
   date: string;
-  worker: Worker;
+  /** 複数作業者対応。旧データは読み込み時に worker(string) → workers([]) へ migrate される */
+  workers: Worker[];
   location: string;
   workContent: string;
   /** 時系列で複数追加。旧データは読み込み時に migrate される */

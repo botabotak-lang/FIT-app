@@ -58,7 +58,9 @@ export default function WorkReportStep({
   const workerOptions = useMemo(() => {
     const legacy = new Set<string>();
     workDayEntries.forEach((e) => {
-      if (e.worker && !activeWorkerNames.includes(e.worker)) legacy.add(e.worker);
+      (e.workers ?? []).forEach((w) => {
+        if (w && !activeWorkerNames.includes(w)) legacy.add(w);
+      });
     });
     selectedWorkers.forEach((w) => {
       if (w && !activeWorkerNames.includes(w)) legacy.add(w);
@@ -66,7 +68,7 @@ export default function WorkReportStep({
     return [...activeWorkerNames, ...Array.from(legacy)];
   }, [activeWorkerNames, workDayEntries, selectedWorkers]);
 
-  const defaultWorker = selectedWorkers[0] || activeWorkerNames[0] || "";
+  const defaultWorkers = selectedWorkers.length > 0 ? [selectedWorkers[0]] : activeWorkerNames.length > 0 ? [activeWorkerNames[0]] : [];
 
   const addEntry = () => {
     const today = new Date();
@@ -75,7 +77,7 @@ export default function WorkReportStep({
     const newEntry: WorkDayEntry = {
       id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
       date: dateStr,
-      worker: defaultWorker || workerOptions[0] || "",
+      workers: defaultWorkers.length > 0 ? defaultWorkers : workerOptions.length > 0 ? [workerOptions[0]] : [],
       location: "",
       workContent: "",
       blocks: [],
@@ -149,8 +151,9 @@ export default function WorkReportStep({
     const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
 <title>修理作業報告書</title>
 <style>
+  @page { size: A4 landscape; margin: 10mm 8mm; }
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { font-family: "Hiragino Kaku Gothic ProN","Yu Gothic","Meiryo",sans-serif; padding: 20px; font-size: 11px; color: #000; }
+  body { font-family: "MS PGothic","Hiragino Kaku Gothic ProN","Meiryo",sans-serif; padding: 10px; font-size: 11px; color: #000; }
   .page-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 6px; }
   .title { font-size: 20px; font-weight: bold; letter-spacing: 8px; }
   .year { font-size: 12px; }
@@ -169,7 +172,7 @@ export default function WorkReportStep({
   .col-worker { width: 6%; }
   .col-location { width: 7%; }
   .col-content { width: 57%; }
-  @media print { body { padding: 10px; } }
+  @media print { body { padding: 0; } }
 </style>
 </head><body>
   <div class="page-header">
@@ -265,23 +268,38 @@ export default function WorkReportStep({
                   />
                 </div>
                 <div>
-                  <Label className="text-xs text-gray-600">作業者</Label>
-                  <Select
-                    value={entry.worker}
-                    onValueChange={(v) => updateEntry(entry.id, { worker: v })}
-                  >
-                    <SelectTrigger className="bg-white">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {workerOptions.map((w) => (
-                        <SelectItem key={w} value={w}>
+                  <Label className="text-xs text-gray-600">作業者（複数選択可）</Label>
+                  <div className="flex flex-wrap gap-1 mt-1">
+                    {workerOptions.map((w) => {
+                      const isSelected = (entry.workers ?? []).includes(w);
+                      return (
+                        <button
+                          key={w}
+                          type="button"
+                          onClick={() => {
+                            const current = entry.workers ?? [];
+                            const next = isSelected
+                              ? current.filter((x) => x !== w)
+                              : [...current, w];
+                            updateEntry(entry.id, { workers: next });
+                          }}
+                          className={`px-2 py-1 text-xs rounded border transition-colors ${
+                            isSelected
+                              ? "bg-blue-600 text-white border-blue-600"
+                              : "bg-white text-gray-700 border-gray-300 hover:border-blue-400"
+                          }`}
+                        >
                           {w}
-                          {!activeWorkerNames.includes(w) ? "（マスタ外）" : ""}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                          {!activeWorkerNames.includes(w) ? "＊" : ""}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {(entry.workers ?? []).length > 0 && (
+                    <p className="text-xs text-gray-500 mt-1">
+                      {entry.workers.join("、")}
+                    </p>
+                  )}
                 </div>
                 <div className="col-span-2">
                   <Label className="text-xs text-gray-600">場所</Label>

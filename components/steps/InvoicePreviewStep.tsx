@@ -47,7 +47,8 @@ export default function InvoicePreviewStep({
 
     const workerStats = new Map<string, { regular: number; overtime: number; holiday: number; travel: number }>();
     workDayEntries.forEach((entry) => {
-      const s = workerStats.get(entry.worker) || { regular: 0, overtime: 0, holiday: 0, travel: 0 };
+      const workerKey = (entry.workers ?? []).join("、") || "不明";
+      const s = workerStats.get(workerKey) || { regular: 0, overtime: 0, holiday: 0, travel: 0 };
       (entry.blocks || []).forEach((b) => {
         const h = calcBlockHours(b);
         if (h <= 0 || b.kind === "break") return;
@@ -66,7 +67,7 @@ export default function InvoicePreviewStep({
             break;
         }
       });
-      workerStats.set(entry.worker, s);
+      workerStats.set(workerKey, s);
     });
 
     workerStats.forEach((s, worker) => {

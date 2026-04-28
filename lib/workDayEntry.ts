@@ -1,4 +1,4 @@
-import type { ShipCase, TimeBlock, TimeBlockKind, WorkDayEntry, TimeRange } from "./types";
+import type { ShipCase, TimeBlock, TimeBlockKind, WorkDayEntry, TimeRange, Worker } from "./types";
 import { REGULAR_RATE, HOLIDAY_RATE, TRAVEL_RATE } from "./types";
 
 export function newTimeBlockId(): string {
@@ -13,11 +13,21 @@ export function calcBlockHours(block: { start: string; end: string }): number {
   return h > 0 ? h : 0;
 }
 
-/** 旧形式（travel/regular/overtime/holiday）を blocks に変換 */
+function migrateWorkers(ex: Record<string, unknown>): Worker[] {
+  if (Array.isArray(ex.workers)) return ex.workers as Worker[];
+  if (typeof ex.worker === "string" && ex.worker) return [ex.worker as Worker];
+  return [];
+}
+
+/** 旧形式（travel/regular/overtime/holiday / worker 文字列）を正規化 */
 export function normalizeWorkDayEntry(entry: WorkDayEntry | Record<string, unknown>): WorkDayEntry {
   const ex = entry as Record<string, unknown>;
   if (Array.isArray(ex.blocks)) {
-    return entry as WorkDayEntry;
+    // blocks あり = 新形式だが worker→workers マイグレーションは常に実行
+    const e = entry as WorkDayEntry;
+    return Array.isArray(ex.workers)
+      ? e
+      : { ...e, workers: migrateWorkers(ex) };
   }
   const blocks: TimeBlock[] = [];
   const tryAdd = (kind: TimeBlockKind, r: unknown) => {
@@ -34,7 +44,7 @@ export function normalizeWorkDayEntry(entry: WorkDayEntry | Record<string, unkno
   return {
     id: String(ex.id ?? ""),
     date: String(ex.date ?? ""),
-    worker: ex.worker as WorkDayEntry["worker"],
+    workers: migrateWorkers(ex),
     location: String(ex.location ?? ""),
     workContent: String(ex.workContent ?? ""),
     blocks,

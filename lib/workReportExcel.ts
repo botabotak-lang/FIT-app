@@ -52,7 +52,7 @@ function applyColumnWidths(ws: ExcelJS.Worksheet): void {
 function styleTableHeaderCell(cell: ExcelJS.Cell, colIndex: number): void {
   cell.border = borderAll;
   cell.fill = HEADER_FILL;
-  cell.font = { bold: true, size: 10, name: "Yu Gothic", color: { argb: "FF000000" } };
+  cell.font = { bold: true, size: 10, name: "MS PGothic", color: { argb: "FF000000" } };
   cell.alignment = {
     horizontal: "center",
     vertical: "middle",
@@ -84,13 +84,14 @@ function styleBodyCell(cell: ExcelJS.Cell, colIndex: number): void {
     bottom: thin,
     right: thin,
   };
-  cell.font = { size: 10, name: "Yu Gothic", color: { argb: "FF000000" } };
+  cell.font = { size: 10, name: "MS PGothic", color: { argb: "FF000000" } };
+  const wrapCols = [1, 2, 3, 4, 5]; // 移動・作業内・作業外・休日・作業者
   const centerCols = [0, 1, 2, 3, 4, 5, 6];
   if (centerCols.includes(colIndex)) {
     cell.alignment = {
       horizontal: "center",
       vertical: "top",
-      wrapText: false,
+      wrapText: wrapCols.includes(colIndex),
     };
   } else {
     cell.alignment = {
@@ -130,13 +131,13 @@ export async function downloadWorkReportExcel(
   ws.mergeCells(TITLE_ROW, 1, TITLE_ROW, 7);
   const titleCell = ws.getCell(TITLE_ROW, 1);
   titleCell.value = WORK_REPORT_TITLE_SPACED;
-  titleCell.font = { bold: true, size: 20, name: "Yu Gothic" };
+  titleCell.font = { bold: true, size: 20, name: "MS PGothic" };
   titleCell.alignment = { horizontal: "center", vertical: "middle" };
   titleCell.border = borderAll;
 
   const yearCell = ws.getCell(TITLE_ROW, 8);
   yearCell.value = year;
-  yearCell.font = { size: 12, name: "Yu Gothic" };
+  yearCell.font = { size: 12, name: "MS PGothic" };
   yearCell.alignment = { horizontal: "right", vertical: "middle" };
   yearCell.border = borderAll;
 
@@ -150,7 +151,7 @@ export async function downloadWorkReportExcel(
   const labelFont: Partial<ExcelJS.Font> = {
     size: 10,
     color: { argb: "FF555555" },
-    name: "Yu Gothic",
+    name: "MS PGothic",
   };
   const labelAlign: Partial<ExcelJS.Alignment> = {
     horizontal: "center",
@@ -159,7 +160,7 @@ export async function downloadWorkReportExcel(
   const valueFont: Partial<ExcelJS.Font> = {
     bold: true,
     size: 12,
-    name: "Yu Gothic",
+    name: "MS PGothic",
   };
   const valueAlign: Partial<ExcelJS.Alignment> = {
     horizontal: "center",
@@ -249,6 +250,13 @@ export async function downloadWorkReportExcel(
       ? 18
       : estimateBodyRowHeightPts(workContent, contentColWidth);
   });
+
+  // 印刷設定：横向き・白黒・2ページ目以降もタイトル行（1〜4行）を繰り返す
+  ws.pageSetup.paperSize = 9; // A4
+  ws.pageSetup.orientation = "landscape";
+  ws.pageSetup.blackAndWhite = true;
+  ws.pageSetup.printTitlesRow = "$1:$4";
+  ws.pageSetup.fitToPage = false;
 
   const buffer = await wb.xlsx.writeBuffer();
   const blob = new Blob([buffer], {
