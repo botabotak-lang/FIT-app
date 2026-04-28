@@ -1,11 +1,9 @@
-import { supabase } from "./supabase";
+import { supabase, SUPABASE_URL, SUPABASE_ANON_KEY } from "./supabase";
 import type { ShipCase } from "./types";
 import { normalizeShipCase } from "./workDayEntry";
 
 export function isSupabaseConfigured(): boolean {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
-  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "";
-  return Boolean(url.trim() && key.trim());
+  return Boolean(SUPABASE_URL && SUPABASE_ANON_KEY && !SUPABASE_URL.includes("127.0.0.1"));
 }
 
 type ShipCaseRow = {
