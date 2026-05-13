@@ -93,7 +93,7 @@ function estimateBodyRowHeightPts(
 }
 
 function styleBodyCell(cell: ExcelJS.Cell, colIndex: number): void {
-  cell.border = borderHair;
+  cell.border = borderAll;
   cell.font = { size: 10, name: "MS PGothic", color: { argb: "FF000000" } };
   const wrapCols = [1, 2, 3, 4, 5];
   const centerCols = [0, 1, 2, 3, 4, 5, 6];
