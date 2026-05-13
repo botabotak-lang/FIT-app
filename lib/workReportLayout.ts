@@ -90,16 +90,23 @@ export const WORK_REPORT_TITLE_MERGE = {
   e: { r: 0, c: 6 },
 } as const;
 
-/** Excel 用列幅（印刷の .col-content 57% に寄せて H 列を広く） */
+/** Excel 用列幅（A:月日, B-E:時間系, F-G:作業者/場所, H-O:作業内容マージセル8列） */
 export const WORK_REPORT_EXCEL_COLS = [
-  { wch: 6 },
-  { wch: 11 },
-  { wch: 11 },
-  { wch: 11 },
-  { wch: 9 },
-  { wch: 8 },
-  { wch: 11 },
-  { wch: 66 },
+  { wch: 5.38 },  // A: 月/日
+  { wch: 10.50 }, // B: 移動
+  { wch: 10.50 }, // C: 作業内(平日)
+  { wch: 10.50 }, // D: 作業外(平日)
+  { wch: 10.50 }, // E: 休日
+  { wch: 10.25 }, // F: 作業者
+  { wch: 10.25 }, // G: 場所
+  { wch: 10.0 },  // H: 作業内容①
+  { wch: 10.0 },  // I: 作業内容②
+  { wch: 10.0 },  // J: 作業内容③
+  { wch: 10.0 },  // K: 作業内容④
+  { wch: 10.0 },  // L: 作業内容⑤
+  { wch: 10.0 },  // M: 作業内容⑥
+  { wch: 10.0 },  // N: 作業内容⑦
+  { wch: 10.0 },  // O: 作業内容⑧
 ];
 
 /** 印刷用テーブルヘッダー HTML（th 内） */

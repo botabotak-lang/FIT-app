@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Trash2, Printer, Plus, FileSpreadsheet } from "lucide-react";
+import { Trash2, Printer, Plus, FileSpreadsheet, Upload } from "lucide-react";
 import {
   BasicInfo,
   Worker,
@@ -28,6 +28,7 @@ import {
   workReportBodyRowsHtml,
 } from "@/lib/workReportLayout";
 import { downloadWorkReportExcel } from "@/lib/workReportExcel";
+import { importWorkReportFromExcel } from "@/lib/workReportImport";
 
 type Props = {
   basicInfo: BasicInfo;
@@ -43,6 +44,8 @@ export default function WorkReportStep({
   onWorkDayEntriesChange,
 }: Props) {
   const [employees, setEmployees] = useState<Employee[]>([]);
+  const [importError, setImportError] = useState<string | null>(null);
+  const importInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     getActiveEmployees()
@@ -143,6 +146,32 @@ export default function WorkReportStep({
     await downloadWorkReportExcel(basicInfo, sorted);
   };
 
+  const handleImportExcel = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImportError(null);
+    try {
+      const imported = await importWorkReportFromExcel(file, basicInfo.receptionDate);
+      if (imported.length === 0) {
+        setImportError("作業データが見つかりませんでした。5行目以降にデータがあるか確認してください。");
+        return;
+      }
+      if (
+        workDayEntries.length > 0 &&
+        !window.confirm(
+          `現在の作業データ（${workDayEntries.length}件）をExcelの内容（${imported.length}件）で上書きします。よろしいですか？`
+        )
+      ) {
+        return;
+      }
+      onWorkDayEntriesChange(imported);
+    } catch (err) {
+      setImportError(err instanceof Error ? err.message : "読み込みに失敗しました");
+    } finally {
+      if (importInputRef.current) importInputRef.current.value = "";
+    }
+  };
+
   const handlePrint = () => {
     const sorted = sortWorkDayEntries(workDayEntries);
     const year = workReportYearLabel(basicInfo);
@@ -235,12 +264,32 @@ export default function WorkReportStep({
             <FileSpreadsheet className="w-4 h-4 mr-2" />
             Excelで出力（1枚目）
           </Button>
+          <Button
+            variant="outline"
+            onClick={() => importInputRef.current?.click()}
+          >
+            <Upload className="w-4 h-4 mr-2" />
+            Excelから読み込み
+          </Button>
+          <input
+            ref={importInputRef}
+            type="file"
+            accept=".xlsx,.xls"
+            className="hidden"
+            onChange={handleImportExcel}
+          />
           <Button variant="outline" onClick={handlePrint} disabled={workDayEntries.length === 0}>
             <Printer className="w-4 h-4 mr-2" />
             印刷
           </Button>
         </div>
       </div>
+
+      {importError && (
+        <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-sm">
+          {importError}
+        </div>
+      )}
 
       {workDayEntries.length === 0 && (
         <div className="text-center py-8 text-gray-400 border-2 border-dashed rounded-lg">

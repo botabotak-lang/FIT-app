@@ -20,6 +20,11 @@ const thin: ExcelJS.Border = {
   color: { argb: "FF000000" },
 };
 
+const hair: ExcelJS.Border = {
+  style: "hair",
+  color: { argb: "FF000000" },
+};
+
 const borderAll: Partial<ExcelJS.Borders> = {
   top: thin,
   left: thin,
@@ -27,7 +32,18 @@ const borderAll: Partial<ExcelJS.Borders> = {
   right: thin,
 };
 
+const borderHair: Partial<ExcelJS.Borders> = {
+  top: hair,
+  left: hair,
+  bottom: hair,
+  right: hair,
+};
+
 const emptyJp = "　";
+
+// 作業内容はH〜O列（列8〜15）をマージ
+const CONTENT_COL_START = 8;
+const CONTENT_COL_END = 15;
 
 function tableHeaderValues(): string[] {
   return [
@@ -48,7 +64,6 @@ function applyColumnWidths(ws: ExcelJS.Worksheet): void {
   });
 }
 
-/** 印刷用 HTML に近い見出しセル（改行・折り返し） */
 function styleTableHeaderCell(cell: ExcelJS.Cell, colIndex: number): void {
   cell.border = borderAll;
   cell.fill = HEADER_FILL;
@@ -60,7 +75,7 @@ function styleTableHeaderCell(cell: ExcelJS.Cell, colIndex: number): void {
   };
 }
 
-/** H 列幅（文字幅）と本文から行高ポイントを推定（改行・折り返し想定） */
+/** H〜O列幅の合計から行高ポイントを推定 */
 function estimateBodyRowHeightPts(
   workContent: string,
   columnWidthChars: number
@@ -78,14 +93,9 @@ function estimateBodyRowHeightPts(
 }
 
 function styleBodyCell(cell: ExcelJS.Cell, colIndex: number): void {
-  cell.border = {
-    top: thin,
-    left: thin,
-    bottom: thin,
-    right: thin,
-  };
+  cell.border = borderAll;
   cell.font = { size: 10, name: "MS PGothic", color: { argb: "FF000000" } };
-  const wrapCols = [1, 2, 3, 4, 5]; // 移動・作業内・作業外・休日・作業者
+  const wrapCols = [1, 2, 3, 4, 5];
   const centerCols = [0, 1, 2, 3, 4, 5, 6];
   if (centerCols.includes(colIndex)) {
     cell.alignment = {
@@ -104,6 +114,7 @@ function styleBodyCell(cell: ExcelJS.Cell, colIndex: number): void {
 
 /**
  * 作業報告1枚目を、印刷レイアウトに近い罫線・フォントで Excel 出力する。
+ * A〜O列15列構造。H〜O列（8列）を作業内容のマージセルとして使用。
  */
 export async function downloadWorkReportExcel(
   basicInfo: BasicInfo,
@@ -128,18 +139,21 @@ export async function downloadWorkReportExcel(
   const TABLE_HEADER_ROW = 4;
   const DATA_START_ROW = 5;
 
-  ws.mergeCells(TITLE_ROW, 1, TITLE_ROW, 7);
+  // ── 行1: タイトル行 ─────────────────────────────
+  // A〜N列: 修理作業報告書（罫線なし）
+  ws.mergeCells(TITLE_ROW, 1, TITLE_ROW, 14);
   const titleCell = ws.getCell(TITLE_ROW, 1);
   titleCell.value = WORK_REPORT_TITLE_SPACED;
   titleCell.font = { bold: true, size: 20, name: "MS PGothic" };
   titleCell.alignment = { horizontal: "left", vertical: "middle" };
-  titleCell.border = borderAll;
+  // 罫線なし（③対応）
 
-  const yearCell = ws.getCell(TITLE_ROW, 8);
+  // O列: 令和8年（太文字、罫線なし）
+  const yearCell = ws.getCell(TITLE_ROW, 15);
   yearCell.value = year;
-  yearCell.font = { size: 12, name: "MS PGothic" };
+  yearCell.font = { bold: true, size: 12, name: "MS PGothic" };
   yearCell.alignment = { horizontal: "right", vertical: "middle" };
-  yearCell.border = borderAll;
+  // 罫線なし（③対応）
 
   ws.getRow(TITLE_ROW).height = 28;
 
@@ -167,91 +181,117 @@ export async function downloadWorkReportExcel(
     vertical: "middle",
   };
 
+  // ── 行2: 情報ラベル行（罫線: 最細点線）─────────────
+  // A-B: 船名
   ws.mergeCells(INFO_LABEL_ROW, 1, INFO_LABEL_ROW, 2);
   const shipLabel = ws.getCell(INFO_LABEL_ROW, 1);
   shipLabel.value = "船名";
   shipLabel.font = labelFont;
   shipLabel.alignment = labelAlign;
-  shipLabel.border = borderAll;
+  shipLabel.border = borderHair;
 
-  ws.mergeCells(INFO_LABEL_ROW, 3, INFO_LABEL_ROW, 6);
+  // C-G: 科目
+  ws.mergeCells(INFO_LABEL_ROW, 3, INFO_LABEL_ROW, 7);
   const catLabel = ws.getCell(INFO_LABEL_ROW, 3);
   catLabel.value = "科目";
   catLabel.font = labelFont;
   catLabel.alignment = labelAlign;
-  catLabel.border = borderAll;
+  catLabel.border = borderHair;
 
-  const modelLabel = ws.getCell(INFO_LABEL_ROW, 7);
+  // H-L: 型名
+  ws.mergeCells(INFO_LABEL_ROW, 8, INFO_LABEL_ROW, 12);
+  const modelLabel = ws.getCell(INFO_LABEL_ROW, 8);
   modelLabel.value = "型名";
   modelLabel.font = labelFont;
   modelLabel.alignment = labelAlign;
-  modelLabel.border = borderAll;
+  modelLabel.border = borderHair;
 
-  const mfgLabel = ws.getCell(INFO_LABEL_ROW, 8);
+  // M-O: 製造者
+  ws.mergeCells(INFO_LABEL_ROW, 13, INFO_LABEL_ROW, 15);
+  const mfgLabel = ws.getCell(INFO_LABEL_ROW, 13);
   mfgLabel.value = "製造者";
   mfgLabel.font = labelFont;
   mfgLabel.alignment = labelAlign;
-  mfgLabel.border = borderAll;
+  mfgLabel.border = borderHair;
 
+  // ── 行3: 情報値行（罫線: 最細点線）─────────────────
   ws.mergeCells(INFO_VALUE_ROW, 1, INFO_VALUE_ROW, 2);
   const shipVal = ws.getCell(INFO_VALUE_ROW, 1);
   shipVal.value = ship;
   shipVal.font = valueFont;
   shipVal.alignment = valueAlign;
-  shipVal.border = borderAll;
+  shipVal.border = borderHair;
 
-  ws.mergeCells(INFO_VALUE_ROW, 3, INFO_VALUE_ROW, 6);
+  ws.mergeCells(INFO_VALUE_ROW, 3, INFO_VALUE_ROW, 7);
   const catVal = ws.getCell(INFO_VALUE_ROW, 3);
   catVal.value = category;
   catVal.font = valueFont;
   catVal.alignment = valueAlign;
-  catVal.border = borderAll;
+  catVal.border = borderHair;
 
-  const modelVal = ws.getCell(INFO_VALUE_ROW, 7);
+  ws.mergeCells(INFO_VALUE_ROW, 8, INFO_VALUE_ROW, 12);
+  const modelVal = ws.getCell(INFO_VALUE_ROW, 8);
   modelVal.value = model;
   modelVal.font = valueFont;
   modelVal.alignment = valueAlign;
-  modelVal.border = borderAll;
+  modelVal.border = borderHair;
 
-  const mfgVal = ws.getCell(INFO_VALUE_ROW, 8);
+  ws.mergeCells(INFO_VALUE_ROW, 13, INFO_VALUE_ROW, 15);
+  const mfgVal = ws.getCell(INFO_VALUE_ROW, 13);
   mfgVal.value = manufacturer;
   mfgVal.font = valueFont;
   mfgVal.alignment = valueAlign;
-  mfgVal.border = borderAll;
+  mfgVal.border = borderHair;
 
   ws.getRow(INFO_LABEL_ROW).height = 18;
   ws.getRow(INFO_VALUE_ROW).height = 22;
 
+  // ── 行4: テーブルヘッダー行 ──────────────────────
   const headers = tableHeaderValues();
-  headers.forEach((text, i) => {
+  // A〜G列: 個別ヘッダー
+  for (let i = 0; i < 7; i++) {
     const cell = ws.getCell(TABLE_HEADER_ROW, i + 1);
-    cell.value = text;
+    cell.value = headers[i];
     styleTableHeaderCell(cell, i);
-  });
+  }
+  // H〜O列: 作業内容（マージセル）
+  ws.mergeCells(TABLE_HEADER_ROW, CONTENT_COL_START, TABLE_HEADER_ROW, CONTENT_COL_END);
+  const contentHeaderCell = ws.getCell(TABLE_HEADER_ROW, CONTENT_COL_START);
+  contentHeaderCell.value = headers[7];
+  styleTableHeaderCell(contentHeaderCell, 7);
+
   ws.getRow(TABLE_HEADER_ROW).height = 36;
 
-  const contentColWidth =
-    typeof ws.getColumn(8).width === "number" ? ws.getColumn(8).width! : 66;
+  // H〜O列の合計幅（行高推定用）
+  const contentColTotalWidth = 10.0 * 8; // 80
 
+  // ── 行5以降: データ行 ───────────────────────────
   bodyRows.forEach((row, ri) => {
     const r = DATA_START_ROW + ri;
-    row.forEach((val, ci) => {
+    // A〜G列: 7列分のデータ
+    for (let ci = 0; ci < 7; ci++) {
       const cell = ws.getCell(r, ci + 1);
-      cell.value = val;
+      cell.value = row[ci];
       styleBodyCell(cell, ci);
-    });
+    }
+    // H〜O列: 作業内容（マージセル）
+    ws.mergeCells(r, CONTENT_COL_START, r, CONTENT_COL_END);
+    const contentCell = ws.getCell(r, CONTENT_COL_START);
+    contentCell.value = row[7] ?? "";
+    styleBodyCell(contentCell, 7);
+
     const workContent = String(row[7] ?? "");
     const isBlankRow = row.every((c) => c === "");
     ws.getRow(r).height = isBlankRow
       ? 18
-      : estimateBodyRowHeightPts(workContent, contentColWidth);
+      : estimateBodyRowHeightPts(workContent, contentColTotalWidth);
   });
 
-  // 印刷設定：横向き・白黒・2ページ目以降もタイトル行（1〜4行）を繰り返す
+  // 印刷設定: 横向き・白黒・2ページ目以降もヘッダー行(4行目)を繰り返す
   ws.pageSetup.paperSize = 9; // A4
   ws.pageSetup.orientation = "landscape";
   ws.pageSetup.blackAndWhite = true;
-  ws.pageSetup.printTitlesRow = "$4:$4";
+  ws.pageSetup.printTitlesRow = "4:4"; // ②④: "$4:$4" だとExcelJSが不正なdefinedNameを生成するため修正
   ws.pageSetup.fitToPage = false;
   ws.pageSetup.margins = {
     top: 0.354, bottom: 0.354,
