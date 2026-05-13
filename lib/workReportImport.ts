@@ -16,7 +16,8 @@ function parseTimeRanges(text: string, kind: TimeBlockKind): TimeBlock[] {
       const start = parts[0].trim();
       const end = parts[1].trim();
       if (!start || !end) return null;
-      return { id: newTimeBlockId(), kind, start, end } satisfies TimeBlock;
+      const block: TimeBlock = { id: newTimeBlockId(), kind, start, end };
+      return block;
     })
     .filter((b): b is TimeBlock => b !== null);
 }
