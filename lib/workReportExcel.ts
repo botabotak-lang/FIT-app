@@ -25,19 +25,26 @@ const hair: ExcelJS.Border = {
   color: { argb: "FF000000" },
 };
 
-const borderAll: Partial<ExcelJS.Borders> = {
-  top: thin,
-  left: thin,
-  bottom: thin,
-  right: thin,
-};
-
-const borderHair: Partial<ExcelJS.Borders> = {
-  top: hair,
-  left: hair,
-  bottom: hair,
-  right: hair,
-};
+/**
+ * 罫線ヘルパー：セルの位置に応じた罫線オブジェクトを生成する。
+ * 縦線ルール: A列（colIndex===0）のleft=thin、それ以外はhair。rightは常にhair。
+ * @param topStyle  上辺スタイル（undefined = 設定なし）
+ * @param bottomStyle 下辺スタイル
+ * @param colIndex  0ベースの列インデックス（0=A列）
+ */
+function makeBorder(
+  topStyle: ExcelJS.Border | undefined,
+  bottomStyle: ExcelJS.Border,
+  colIndex: number
+): Partial<ExcelJS.Borders> {
+  const b: Partial<ExcelJS.Borders> = {
+    bottom: bottomStyle,
+    left: colIndex === 0 ? thin : hair,
+    right: hair,
+  };
+  if (topStyle) b.top = topStyle;
+  return b;
+}
 
 const emptyJp = "　";
 
@@ -65,7 +72,8 @@ function applyColumnWidths(ws: ExcelJS.Worksheet): void {
 }
 
 function styleTableHeaderCell(cell: ExcelJS.Cell, colIndex: number): void {
-  cell.border = borderAll;
+  // 行4: 上下=thin、左=A列のみthin/他はhair、右=hair
+  cell.border = makeBorder(thin, thin, colIndex);
   cell.fill = HEADER_FILL;
   cell.font = { bold: true, size: 10, name: "MS PGothic", color: { argb: "FF000000" } };
   cell.alignment = {
@@ -92,8 +100,23 @@ function estimateBodyRowHeightPts(
   return Math.min(409, Math.max(18, 6 + displayLines * 13));
 }
 
-function styleBodyCell(cell: ExcelJS.Cell, colIndex: number): void {
-  cell.border = borderAll;
+/**
+ * データ行セルのスタイルを設定する。
+ * @param isFirstRow データ行内の最初の行か（top罫線を省略する）
+ * @param isLastRow  データ行内の最後の行か（bottom=thin にする）
+ */
+function styleBodyCell(
+  cell: ExcelJS.Cell,
+  colIndex: number,
+  isFirstRow: boolean,
+  isLastRow: boolean
+): void {
+  // 最初の行はtop罫線なし（行4のbottom=thinと境界を共用）
+  // 最終行はbottom=thin、それ以外はhair
+  const topStyle = isFirstRow ? undefined : hair;
+  const bottomStyle = isLastRow ? thin : hair;
+  cell.border = makeBorder(topStyle, bottomStyle, colIndex);
+
   cell.font = { size: 10, name: "MS PGothic", color: { argb: "FF000000" } };
   const wrapCols = [1, 2, 3, 4, 5];
   const centerCols = [0, 1, 2, 3, 4, 5, 6];
@@ -181,14 +204,14 @@ export async function downloadWorkReportExcel(
     vertical: "middle",
   };
 
-  // ── 行2: 情報ラベル行（罫線: 最細点線）─────────────
-  // A-B: 船名
+  // ── 行2: 情報ラベル行（上辺=thin、下辺=hair）─────────
+  // A-B: 船名（A列のため left=thin）
   ws.mergeCells(INFO_LABEL_ROW, 1, INFO_LABEL_ROW, 2);
   const shipLabel = ws.getCell(INFO_LABEL_ROW, 1);
   shipLabel.value = "船名";
   shipLabel.font = labelFont;
   shipLabel.alignment = labelAlign;
-  shipLabel.border = borderHair;
+  shipLabel.border = makeBorder(thin, hair, 0); // colIndex=0 → A列
 
   // C-G: 科目
   ws.mergeCells(INFO_LABEL_ROW, 3, INFO_LABEL_ROW, 7);
@@ -196,7 +219,7 @@ export async function downloadWorkReportExcel(
   catLabel.value = "科目";
   catLabel.font = labelFont;
   catLabel.alignment = labelAlign;
-  catLabel.border = borderHair;
+  catLabel.border = makeBorder(thin, hair, 1); // colIndex≠0 → left=hair
 
   // H-L: 型名
   ws.mergeCells(INFO_LABEL_ROW, 8, INFO_LABEL_ROW, 12);
@@ -204,7 +227,7 @@ export async function downloadWorkReportExcel(
   modelLabel.value = "型名";
   modelLabel.font = labelFont;
   modelLabel.alignment = labelAlign;
-  modelLabel.border = borderHair;
+  modelLabel.border = makeBorder(thin, hair, 1);
 
   // M-O: 製造者
   ws.mergeCells(INFO_LABEL_ROW, 13, INFO_LABEL_ROW, 15);
@@ -212,36 +235,36 @@ export async function downloadWorkReportExcel(
   mfgLabel.value = "製造者";
   mfgLabel.font = labelFont;
   mfgLabel.alignment = labelAlign;
-  mfgLabel.border = borderHair;
+  mfgLabel.border = makeBorder(thin, hair, 1);
 
-  // ── 行3: 情報値行（罫線: 最細点線）─────────────────
+  // ── 行3: 情報値行（上辺=hair、下辺=thin）─────────────
   ws.mergeCells(INFO_VALUE_ROW, 1, INFO_VALUE_ROW, 2);
   const shipVal = ws.getCell(INFO_VALUE_ROW, 1);
   shipVal.value = ship;
   shipVal.font = valueFont;
   shipVal.alignment = valueAlign;
-  shipVal.border = borderHair;
+  shipVal.border = makeBorder(hair, thin, 0); // A列
 
   ws.mergeCells(INFO_VALUE_ROW, 3, INFO_VALUE_ROW, 7);
   const catVal = ws.getCell(INFO_VALUE_ROW, 3);
   catVal.value = category;
   catVal.font = valueFont;
   catVal.alignment = valueAlign;
-  catVal.border = borderHair;
+  catVal.border = makeBorder(hair, thin, 1);
 
   ws.mergeCells(INFO_VALUE_ROW, 8, INFO_VALUE_ROW, 12);
   const modelVal = ws.getCell(INFO_VALUE_ROW, 8);
   modelVal.value = model;
   modelVal.font = valueFont;
   modelVal.alignment = valueAlign;
-  modelVal.border = borderHair;
+  modelVal.border = makeBorder(hair, thin, 1);
 
   ws.mergeCells(INFO_VALUE_ROW, 13, INFO_VALUE_ROW, 15);
   const mfgVal = ws.getCell(INFO_VALUE_ROW, 13);
   mfgVal.value = manufacturer;
   mfgVal.font = valueFont;
   mfgVal.alignment = valueAlign;
-  mfgVal.border = borderHair;
+  mfgVal.border = makeBorder(hair, thin, 1);
 
   ws.getRow(INFO_LABEL_ROW).height = 18;
   ws.getRow(INFO_VALUE_ROW).height = 22;
@@ -262,23 +285,26 @@ export async function downloadWorkReportExcel(
 
   ws.getRow(TABLE_HEADER_ROW).height = 36;
 
-  // H〜O列の合計幅（行高推定用）
-  const contentColTotalWidth = 10.0 * 8; // 80
+  // H〜O列の合計幅（行高推定用）: 80px × 8列 → 10.71 × 8 ≈ 85.71
+  const contentColTotalWidth = 10.71 * 8;
 
   // ── 行5以降: データ行 ───────────────────────────
   bodyRows.forEach((row, ri) => {
     const r = DATA_START_ROW + ri;
+    const isFirstRow = ri === 0;
+    const isLastRow = ri === bodyRows.length - 1;
+
     // A〜G列: 7列分のデータ
     for (let ci = 0; ci < 7; ci++) {
       const cell = ws.getCell(r, ci + 1);
       cell.value = row[ci];
-      styleBodyCell(cell, ci);
+      styleBodyCell(cell, ci, isFirstRow, isLastRow);
     }
-    // H〜O列: 作業内容（マージセル）
+    // H〜O列: 作業内容（マージセル）colIndex=7（H列相当）→ left=hair
     ws.mergeCells(r, CONTENT_COL_START, r, CONTENT_COL_END);
     const contentCell = ws.getCell(r, CONTENT_COL_START);
     contentCell.value = row[7] ?? "";
-    styleBodyCell(contentCell, 7);
+    styleBodyCell(contentCell, 7, isFirstRow, isLastRow);
 
     const workContent = String(row[7] ?? "");
     const isBlankRow = row.every((c) => c === "");
