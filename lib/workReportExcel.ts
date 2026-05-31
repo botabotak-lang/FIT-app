@@ -213,17 +213,17 @@ export async function downloadWorkReportExcel(
   shipLabel.alignment = labelAlign;
   shipLabel.border = makeBorder(thin, hair, 0); // colIndex=0 → A列
 
-  // C-G: 科目
-  ws.mergeCells(INFO_LABEL_ROW, 3, INFO_LABEL_ROW, 7);
+  // C-I: 科目
+  ws.mergeCells(INFO_LABEL_ROW, 3, INFO_LABEL_ROW, 9);
   const catLabel = ws.getCell(INFO_LABEL_ROW, 3);
   catLabel.value = "科目";
   catLabel.font = labelFont;
   catLabel.alignment = labelAlign;
   catLabel.border = makeBorder(thin, hair, 1); // colIndex≠0 → left=hair
 
-  // H-L: 型名
-  ws.mergeCells(INFO_LABEL_ROW, 8, INFO_LABEL_ROW, 12);
-  const modelLabel = ws.getCell(INFO_LABEL_ROW, 8);
+  // J-L: 型名
+  ws.mergeCells(INFO_LABEL_ROW, 10, INFO_LABEL_ROW, 12);
+  const modelLabel = ws.getCell(INFO_LABEL_ROW, 10);
   modelLabel.value = "型名";
   modelLabel.font = labelFont;
   modelLabel.alignment = labelAlign;
@@ -245,15 +245,15 @@ export async function downloadWorkReportExcel(
   shipVal.alignment = valueAlign;
   shipVal.border = makeBorder(hair, thin, 0); // A列
 
-  ws.mergeCells(INFO_VALUE_ROW, 3, INFO_VALUE_ROW, 7);
+  ws.mergeCells(INFO_VALUE_ROW, 3, INFO_VALUE_ROW, 9);
   const catVal = ws.getCell(INFO_VALUE_ROW, 3);
   catVal.value = category;
   catVal.font = valueFont;
   catVal.alignment = valueAlign;
   catVal.border = makeBorder(hair, thin, 1);
 
-  ws.mergeCells(INFO_VALUE_ROW, 8, INFO_VALUE_ROW, 12);
-  const modelVal = ws.getCell(INFO_VALUE_ROW, 8);
+  ws.mergeCells(INFO_VALUE_ROW, 10, INFO_VALUE_ROW, 12);
+  const modelVal = ws.getCell(INFO_VALUE_ROW, 10);
   modelVal.value = model;
   modelVal.font = valueFont;
   modelVal.alignment = valueAlign;
@@ -318,7 +318,9 @@ export async function downloadWorkReportExcel(
   ws.pageSetup.orientation = "landscape";
   ws.pageSetup.blackAndWhite = true;
   ws.pageSetup.printTitlesRow = "4:4"; // ②④: "$4:$4" だとExcelJSが不正なdefinedNameを生成するため修正
-  ws.pageSetup.fitToPage = false;
+  ws.pageSetup.fitToPage = true;
+  ws.pageSetup.fitToWidth = 1;  // 横は1ページ幅に収める
+  ws.pageSetup.fitToHeight = 0; // 縦はデータ量に応じて改ページ
   ws.pageSetup.margins = {
     top: 0.354, bottom: 0.354,
     left: 0.512, right: 0.512,
