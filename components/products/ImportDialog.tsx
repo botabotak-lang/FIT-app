@@ -30,24 +30,34 @@ function downloadTemplate() {
   XLSX.writeFile(wb, "製品マスタ_テンプレート.xlsx");
 }
 
+const SKIP_SHEETS = ["製品マスタ 例"];
+
 function parseSheet(data: unknown[][]): ParsedRow[] {
   if (data.length < 2) return [];
   const rows = data.slice(1);
   return rows
     .filter((r) => r.some((v) => v !== "" && v !== null && v !== undefined))
     .map((r) => {
-      const name = String(r[0] ?? "").trim();
-      const modelType = String(r[1] ?? "").trim();
+      const name = String(r[0] ?? "").replace(/[\r\n]/g, " ").trim();
+      const modelType = String(r[1] ?? "").replace(/[\r\n]/g, " ").trim();
       const supplierRaw = String(r[2] ?? "").trim();
       const supplier = SUPPLIERS.includes(supplierRaw) ? supplierRaw : "その他";
       const purchasePrice = Number(r[3]) || 0;
-      const sellingPrice = Number(r[4]) || 0;
-      const notes = String(r[5] ?? "").trim();
+
+      const sellingRaw = String(r[4] ?? "").trim();
+      const sellingParsed = Number(r[4]);
+      const sellingUnknown = sellingRaw === "" || isNaN(sellingParsed);
+      const sellingPrice = sellingUnknown ? 0 : sellingParsed;
+
+      const notesBase = String(r[5] ?? "").replace(/[\r\n]/g, " ").trim();
+      const notes = sellingUnknown
+        ? notesBase ? `${notesBase}・売値要確認` : "売値要確認"
+        : notesBase;
 
       const errors: string[] = [];
       if (!name) errors.push("品名が空");
       if (purchasePrice <= 0) errors.push("仕入単価が0以下");
-      if (sellingPrice <= 0) errors.push("売値単価が0以下");
+      if (!sellingUnknown && sellingPrice <= 0) errors.push("売値単価が0以下");
 
       return {
         name,
@@ -78,14 +88,18 @@ export default function ImportDialog({ onClose, onComplete }: Props) {
     reader.onload = (ev) => {
       try {
         const wb = XLSX.read(ev.target?.result, { type: "binary" });
-        const ws = wb.Sheets[wb.SheetNames[0]];
-        const data = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1 });
-        const parsed = parseSheet(data);
-        if (parsed.length === 0) {
+        const allRows: ParsedRow[] = [];
+        for (const sheetName of wb.SheetNames) {
+          if (SKIP_SHEETS.includes(sheetName)) continue;
+          const ws = wb.Sheets[sheetName];
+          const data = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1 });
+          allRows.push(...parseSheet(data));
+        }
+        if (allRows.length === 0) {
           setError("データが見つかりませんでした。テンプレートの形式を確認してください。");
           return;
         }
-        setRows(parsed);
+        setRows(allRows);
         setStep("preview");
       } catch {
         setError("ファイルの読み込みに失敗しました。Excel（.xlsx）またはCSVを選択してください。");
