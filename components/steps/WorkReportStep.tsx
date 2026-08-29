@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useState, useMemo, useRef } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Trash2, Printer, Plus, FileSpreadsheet, Upload } from "lucide-react";
+import { Trash2, Printer, Plus, FileSpreadsheet } from "lucide-react";
 import {
   BasicInfo,
   Worker,
@@ -19,16 +19,17 @@ import {
   calcBlockHours,
   calcLaborCostForEntry,
 } from "@/lib/workDayEntry";
+import { DEFAULT_LABOR_RATES, getLaborRates, type LaborRates } from "@/lib/laborRates";
 import { getActiveEmployees, Employee } from "@/lib/employeeMaster";
 import {
   WORK_REPORT_TITLE_SPACED,
+  escapeHtml,
   workReportYearLabel,
   sortWorkDayEntries,
   workReportTableHeaderCellsHtml,
   workReportBodyRowsHtml,
 } from "@/lib/workReportLayout";
-import { downloadWorkReportExcel } from "@/lib/workReportExcel";
-import { importWorkReportFromExcel } from "@/lib/workReportImport";
+import { confirmReportCapacity, downloadReportWorkbook } from "@/lib/reportWorkbook";
 
 type Props = {
   basicInfo: BasicInfo;
@@ -44,13 +45,15 @@ export default function WorkReportStep({
   onWorkDayEntriesChange,
 }: Props) {
   const [employees, setEmployees] = useState<Employee[]>([]);
-  const [importError, setImportError] = useState<string | null>(null);
-  const importInputRef = useRef<HTMLInputElement>(null);
+  const [rates, setRates] = useState<LaborRates>(DEFAULT_LABOR_RATES);
 
   useEffect(() => {
     getActiveEmployees()
       .then(setEmployees)
       .catch(() => setEmployees([]));
+    getLaborRates()
+      .then(setRates)
+      .catch(() => setRates(DEFAULT_LABOR_RATES));
   }, []);
 
   const activeWorkerNames = useMemo(
@@ -142,33 +145,9 @@ export default function WorkReportStep({
 
   const handleExportWorkReportExcel = async () => {
     const sorted = sortWorkDayEntries(workDayEntries);
-    await downloadWorkReportExcel(basicInfo, sorted);
-  };
-
-  const handleImportExcel = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setImportError(null);
-    try {
-      const imported = await importWorkReportFromExcel(file, basicInfo.receptionDate);
-      if (imported.length === 0) {
-        setImportError("作業データが見つかりませんでした。5行目以降にデータがあるか確認してください。");
-        return;
-      }
-      if (
-        workDayEntries.length > 0 &&
-        !window.confirm(
-          `現在の作業データ（${workDayEntries.length}件）をExcelの内容（${imported.length}件）で上書きします。よろしいですか？`
-        )
-      ) {
-        return;
-      }
-      onWorkDayEntriesChange(imported);
-    } catch (err) {
-      setImportError(err instanceof Error ? err.message : "読み込みに失敗しました");
-    } finally {
-      if (importInputRef.current) importInputRef.current.value = "";
-    }
+    const payload = { basicInfo, workDayEntries: sorted, materials: [] };
+    if (!confirmReportCapacity(payload, "workReport")) return;
+    await downloadReportWorkbook(payload, activeWorkerNames, "workReport", rates);
   };
 
   const handlePrint = () => {
@@ -208,10 +187,10 @@ export default function WorkReportStep({
     <div class="year">${year}</div>
   </div>
   <div class="info-row">
-    <div class="info-cell"><div class="info-label">船名</div><div class="info-value">${basicInfo.shipName || "　"}</div></div>
-    <div class="info-cell"><div class="info-label">科目</div><div class="info-value">${basicInfo.category || "　"}</div></div>
-    <div class="info-cell"><div class="info-label">型名</div><div class="info-value">${basicInfo.modelName || "　"}</div></div>
-    <div class="info-cell"><div class="info-label">製造者</div><div class="info-value">${basicInfo.manufacturer || "　"}</div></div>
+    <div class="info-cell"><div class="info-label">船名</div><div class="info-value">${escapeHtml(basicInfo.shipName) || "　"}</div></div>
+    <div class="info-cell"><div class="info-label">科目</div><div class="info-value">${escapeHtml(basicInfo.category) || "　"}</div></div>
+    <div class="info-cell"><div class="info-label">型名</div><div class="info-value">${escapeHtml(basicInfo.modelName) || "　"}</div></div>
+    <div class="info-cell"><div class="info-label">製造者</div><div class="info-value">${escapeHtml(basicInfo.manufacturer) || "　"}</div></div>
   </div>
   <table>
     <thead>
@@ -261,34 +240,14 @@ export default function WorkReportStep({
             disabled={workDayEntries.length === 0}
           >
             <FileSpreadsheet className="w-4 h-4 mr-2" />
-            Excelで出力（1枚目）
+            作業報告書をExcel出力
           </Button>
-          <Button
-            variant="outline"
-            onClick={() => importInputRef.current?.click()}
-          >
-            <Upload className="w-4 h-4 mr-2" />
-            Excelから読み込み
-          </Button>
-          <input
-            ref={importInputRef}
-            type="file"
-            accept=".xlsx,.xls"
-            className="hidden"
-            onChange={handleImportExcel}
-          />
           <Button variant="outline" onClick={handlePrint} disabled={workDayEntries.length === 0}>
             <Printer className="w-4 h-4 mr-2" />
             印刷
           </Button>
         </div>
       </div>
-
-      {importError && (
-        <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-sm">
-          {importError}
-        </div>
-      )}
 
       {workDayEntries.length === 0 && (
         <div className="text-center py-8 text-gray-400 border-2 border-dashed rounded-lg">
@@ -302,7 +261,7 @@ export default function WorkReportStep({
 
       <div className="space-y-4">
         {sortedEntries.map((entry) => {
-          const cost = calcLaborCostForEntry(entry);
+          const cost = calcLaborCostForEntry(entry, rates);
           return (
             <div key={entry.id} className="border rounded-xl p-4 space-y-4 bg-gray-50">
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -489,7 +448,7 @@ export default function WorkReportStep({
             <span className="text-xl font-bold text-blue-700">
               ¥
               {workDayEntries
-                .reduce((sum, e) => sum + calcLaborCostForEntry(e), 0)
+                .reduce((sum, e) => sum + calcLaborCostForEntry(e, rates), 0)
                 .toLocaleString()}
             </span>
           </div>

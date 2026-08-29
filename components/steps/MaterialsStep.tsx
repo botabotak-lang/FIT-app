@@ -4,20 +4,26 @@ import { useState, useEffect } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { X } from "lucide-react";
-import { BasicInfo, Material, SUPPLIERS } from "@/lib/types";
+import { FileSpreadsheet, X } from "lucide-react";
+import { BasicInfo, Material, SUPPLIERS, UNIT_OPTIONS, WorkDayEntry } from "@/lib/types";
 import { Product, getActiveProducts } from "@/lib/productMaster";
+import { getActiveEmployees, Employee } from "@/lib/employeeMaster";
+import { confirmReportCapacity, downloadReportWorkbook } from "@/lib/reportWorkbook";
+import { DEFAULT_LABOR_RATES, getLaborRates, type LaborRates } from "@/lib/laborRates";
 
 type Props = {
   basicInfo: BasicInfo;
+  workDayEntries: WorkDayEntry[];
   materials: Material[];
   onMaterialsChange: (materials: Material[]) => void;
 };
 
-export default function MaterialsStep({ basicInfo, materials, onMaterialsChange }: Props) {
+export default function MaterialsStep({ basicInfo, workDayEntries, materials, onMaterialsChange }: Props) {
   const [masterProducts, setMasterProducts] = useState<Product[]>([]);
+  const [employees, setEmployees] = useState<Employee[]>([]);
   const [productHistory, setProductHistory] = useState<string[]>([]);
   const [openSuggest, setOpenSuggest] = useState<string | null>(null);
+  const [rates, setRates] = useState<LaborRates>(DEFAULT_LABOR_RATES);
   const [searchQuery, setSearchQuery] = useState<{ [key: string]: string }>({});
 
   useEffect(() => {
@@ -36,6 +42,12 @@ export default function MaterialsStep({ basicInfo, materials, onMaterialsChange 
     getActiveProducts()
       .then(setMasterProducts)
       .catch(() => setMasterProducts([]));
+    getActiveEmployees()
+      .then(setEmployees)
+      .catch(() => setEmployees([]));
+    getLaborRates()
+      .then(setRates)
+      .catch(() => setRates(DEFAULT_LABOR_RATES));
   }, []);
 
   const addToHistory = (productName: string) => {
@@ -54,6 +66,7 @@ export default function MaterialsStep({ basicInfo, materials, onMaterialsChange 
       isStock: false,
       supplier: "モノタロウ",
       quantity: 1,
+      unit: "",
       purchasePrice: 0,
       purchaseTotal: 0,
       sellingPrice: 0,
@@ -103,6 +116,7 @@ export default function MaterialsStep({ basicInfo, materials, onMaterialsChange 
           productName: product.name,
           modelType: product.modelType,
           supplier: product.supplier,
+          unit: m.unit || product.unit || "",
           purchasePrice: product.purchasePrice,
           sellingPrice: product.sellingPrice,
           purchaseTotal: m.quantity * product.purchasePrice,
@@ -138,15 +152,33 @@ export default function MaterialsStep({ basicInfo, materials, onMaterialsChange 
   };
 
   const totals = calculateTotals();
+  const activeWorkerNames = employees.map((e) => e.name);
+
+  const handleExportMaterialsExcel = async () => {
+    const payload = { basicInfo, workDayEntries, materials };
+    if (!confirmReportCapacity(payload, "materials")) return;
+    await downloadReportWorkbook(payload, activeWorkerNames, "materials", rates);
+  };
 
   return (
     <div className="space-y-6">
+      <datalist id="material-unit-options">
+        {UNIT_OPTIONS.map((u) => (
+          <option key={u} value={u} />
+        ))}
+      </datalist>
       <div>
         <h2 className="text-xl font-semibold mb-2">材料持出表</h2>
         <div className="bg-gray-50 p-3 rounded text-sm text-gray-700">
           <p>
             <strong>顧客：</strong>{basicInfo.customer} / <strong>船名：</strong>{basicInfo.shipName}
           </p>
+        </div>
+        <div className="mt-3">
+          <Button type="button" variant="outline" onClick={handleExportMaterialsExcel}>
+            <FileSpreadsheet className="w-4 h-4 mr-2" />
+            材料持出表をExcel出力
+          </Button>
         </div>
       </div>
 
@@ -274,6 +306,16 @@ export default function MaterialsStep({ basicInfo, materials, onMaterialsChange 
                   onChange={(e) => updateMaterial(material.id, "quantity", e.target.value)}
                   onFocus={(e) => e.target.select()}
                   min="0"
+                />
+              </div>
+
+              <div>
+                <Label className="text-xs">単位</Label>
+                <Input
+                  list="material-unit-options"
+                  value={material.unit ?? ""}
+                  onChange={(e) => updateMaterial(material.id, "unit", e.target.value)}
+                  placeholder="本・個・式 など"
                 />
               </div>
 

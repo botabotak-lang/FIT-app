@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Product, ProductInput } from "@/lib/productMaster";
-import { SUPPLIERS } from "@/lib/types";
+import { SUPPLIERS, UNIT_OPTIONS } from "@/lib/types";
 
 type Props = {
   product?: Product;
@@ -17,6 +17,7 @@ const EMPTY_FORM: ProductInput = {
   name: "",
   modelType: "",
   supplier: "モノタロウ",
+  unit: "",
   purchasePrice: 0,
   sellingPrice: 0,
   notes: "",
@@ -33,6 +34,7 @@ export default function ProductFormDialog({ product, onSubmit, onCancel }: Props
         name: product.name,
         modelType: product.modelType,
         supplier: product.supplier,
+        unit: product.unit ?? "",
         purchasePrice: product.purchasePrice,
         sellingPrice: product.sellingPrice,
         notes: product.notes,
@@ -106,6 +108,22 @@ export default function ProductFormDialog({ product, onSubmit, onCancel }: Props
                 </option>
               ))}
             </select>
+          </div>
+
+          <div>
+            <Label className="text-sm font-medium">単位</Label>
+            <Input
+              list="product-unit-options"
+              value={form.unit}
+              onChange={(e) => set("unit", e.target.value)}
+              placeholder="例：本 / 個 / 式"
+              className="mt-1"
+            />
+            <datalist id="product-unit-options">
+              {UNIT_OPTIONS.map((u) => (
+                <option key={u} value={u} />
+              ))}
+            </datalist>
           </div>
 
           <div className="grid grid-cols-2 gap-3">

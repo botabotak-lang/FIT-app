@@ -18,6 +18,7 @@ type Material = {
   isStock: boolean;
   supplier: string;
   quantity: number;
+  unit: string;
   purchasePrice: number;
   purchaseTotal: number;
   sellingPrice: number;
@@ -27,6 +28,7 @@ type Material = {
 };
 
 const SUPPLIERS = ["モノタロウ", "アマゾン", "ハートストック", "JRC", "その他"];
+const UNIT_OPTIONS = ["本", "個", "袋", "m", "台", "式", "セット", "巻", "箱"];
 const CUSTOMERS = ["東海汽船", "清水港運", "焼津漁協", "鈴与海運", "その他"];
 
 export default function MaterialsForm() {
@@ -70,6 +72,7 @@ export default function MaterialsForm() {
       isStock: false,
       supplier: "モノタロウ",
       quantity: 1,
+      unit: "",
       purchasePrice: 0,
       purchaseTotal: 0,
       sellingPrice: 0,
@@ -122,6 +125,11 @@ export default function MaterialsForm() {
 
   return (
     <div className="bg-white rounded-lg shadow-md p-6 space-y-6">
+      <datalist id="material-unit-options">
+        {UNIT_OPTIONS.map((u) => (
+          <option key={u} value={u} />
+        ))}
+      </datalist>
       {/* ヘッダー情報 */}
       <div className="space-y-4">
         <h2 className="text-xl font-semibold border-b pb-2">基本情報</h2>
@@ -308,6 +316,16 @@ export default function MaterialsForm() {
                     value={material.quantity}
                     onChange={(e) => updateMaterial(material.id, "quantity", Number(e.target.value))}
                     min="0"
+                  />
+                </div>
+
+                <div>
+                  <Label className="text-xs">単位</Label>
+                  <Input
+                    list="material-unit-options"
+                    value={material.unit}
+                    onChange={(e) => updateMaterial(material.id, "unit", e.target.value)}
+                    placeholder="本・個・式 など"
                   />
                 </div>
 

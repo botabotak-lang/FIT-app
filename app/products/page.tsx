@@ -14,6 +14,7 @@ import {
 } from "@/lib/productMaster";
 import ProductFormDialog from "@/components/products/ProductFormDialog";
 import ImportDialog from "@/components/products/ImportDialog";
+import AdminGate from "@/components/AdminGate";
 
 type DialogState =
   | { mode: "closed" }
@@ -21,6 +22,14 @@ type DialogState =
   | { mode: "edit"; product: Product };
 
 export default function ProductsPage() {
+  return (
+    <AdminGate>
+      <ProductsPageInner />
+    </AdminGate>
+  );
+}
+
+function ProductsPageInner() {
   const router = useRouter();
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
@@ -205,6 +214,7 @@ function ProductList({ products, togglingId, onEdit, onToggle, muted }: ProductL
             </p>
             <p className="text-xs text-gray-600 mt-1">
               仕入 ¥{p.purchasePrice.toLocaleString()} → 売値 ¥{p.sellingPrice.toLocaleString()}
+              {p.unit && <span className="text-gray-400">　/ {p.unit}</span>}
             </p>
             {p.notes && (
               <p className="text-xs text-gray-400 mt-0.5">{p.notes}</p>

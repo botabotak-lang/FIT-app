@@ -15,16 +15,16 @@ type Props = {
   onComplete: () => void;
 };
 
-const TEMPLATE_COLUMNS = ["品名", "型式（規格）", "仕入先", "仕入値", "売値", "備考"];
+const TEMPLATE_COLUMNS = ["品名", "型式（規格）", "仕入先", "仕入値", "売値", "備考", "単位"];
 
 function downloadTemplate() {
   const sampleRows = [
-    ["船舶用VHF無線機", "JHS-800", "JRC", 45000, 68000, ""],
-    ["GPSアンテナ", "GPS-20A", "JRC", 12000, 18000, ""],
-    ["航海灯（LED）", "NL-50", "モノタロウ", 4500, 7200, ""],
+    ["船舶用VHF無線機", "JHS-800", "JRC", 45000, 68000, "", "台"],
+    ["GPSアンテナ", "GPS-20A", "JRC", 12000, 18000, "", "個"],
+    ["航海灯（LED）", "NL-50", "モノタロウ", 4500, 7200, "", "個"],
   ];
   const ws = XLSX.utils.aoa_to_sheet([TEMPLATE_COLUMNS, ...sampleRows]);
-  ws["!cols"] = [{ wch: 30 }, { wch: 16 }, { wch: 16 }, { wch: 12 }, { wch: 12 }, { wch: 30 }];
+  ws["!cols"] = [{ wch: 30 }, { wch: 16 }, { wch: 16 }, { wch: 12 }, { wch: 12 }, { wch: 30 }, { wch: 8 }];
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, "製品マスタ");
   XLSX.writeFile(wb, "製品マスタ_テンプレート.xlsx");
@@ -32,8 +32,14 @@ function downloadTemplate() {
 
 const SKIP_SHEETS = ["製品マスタ 例"];
 
+/** ヘッダー行から「単位」列の位置を探す（列順は問わない。無ければ -1） */
+function findUnitColumn(header: unknown[]): number {
+  return header.findIndex((cell) => String(cell ?? "").trim().replace(/\s/g, "") === "単位");
+}
+
 function parseSheet(data: unknown[][]): ParsedRow[] {
   if (data.length < 2) return [];
+  const unitIndex = findUnitColumn(data[0] ?? []);
   const rows = data.slice(1);
   return rows
     .filter((r) => r.some((v) => v !== "" && v !== null && v !== undefined))
@@ -49,6 +55,8 @@ function parseSheet(data: unknown[][]): ParsedRow[] {
       const sellingUnknown = sellingRaw === "" || isNaN(sellingParsed);
       const sellingPrice = sellingUnknown ? 0 : sellingParsed;
 
+      const unit = unitIndex >= 0 ? String(r[unitIndex] ?? "").trim() : "";
+
       const notesBase = String(r[5] ?? "").replace(/[\r\n]/g, " ").trim();
       const notes = sellingUnknown
         ? notesBase ? `${notesBase}・売値要確認` : "売値要確認"
@@ -63,6 +71,7 @@ function parseSheet(data: unknown[][]): ParsedRow[] {
         name,
         modelType,
         supplier,
+        unit,
         purchasePrice,
         sellingPrice,
         notes,
@@ -191,6 +200,7 @@ export default function ImportDialog({ onClose, onComplete }: Props) {
                   <tr>
                     <th className="text-left px-3 py-2">品名</th>
                     <th className="text-left px-3 py-2">型式</th>
+                    <th className="text-left px-3 py-2">単位</th>
                     <th className="text-right px-3 py-2">仕入単価</th>
                     <th className="text-right px-3 py-2">売値単価</th>
                   </tr>
@@ -200,6 +210,7 @@ export default function ImportDialog({ onClose, onComplete }: Props) {
                     <tr key={i} className="border-t">
                       <td className="px-3 py-2">{r.name}</td>
                       <td className="px-3 py-2 text-gray-500">{r.modelType}</td>
+                      <td className="px-3 py-2 text-gray-500">{r.unit}</td>
                       <td className="px-3 py-2 text-right">
                         ¥{r.purchasePrice.toLocaleString()}
                       </td>

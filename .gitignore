@@ -39,3 +39,9 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# クライアント実データ（原本Excel等・リポジトリには含めない）
+/docs/reference/
+
+# 帳票スクリプトの一時ビルド
+/.tmp-report-build/

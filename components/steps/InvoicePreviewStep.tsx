@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { FileText, FileSpreadsheet } from "lucide-react";
 import {
@@ -8,13 +8,19 @@ import {
   WorkDayEntry,
   Material,
   DocumentType,
-  REGULAR_RATE,
-  HOLIDAY_RATE,
-  TRAVEL_RATE,
   COMPANY_INFO,
 } from "@/lib/types";
+import {
+  DEFAULT_LABOR_RATES,
+  getLaborRates,
+  travelHourlyRate,
+  type LaborRates,
+} from "@/lib/laborRates";
 import { calcBlockHours } from "@/lib/workDayEntry";
+import { escapeHtml } from "@/lib/workReportLayout";
 import * as XLSX from "xlsx";
+import { getActiveEmployees, Employee } from "@/lib/employeeMaster";
+import { confirmReportCapacity, downloadReportWorkbook } from "@/lib/reportWorkbook";
 
 type Props = {
   basicInfo: BasicInfo;
@@ -38,8 +44,19 @@ export default function InvoicePreviewStep({
   materials,
 }: Props) {
   const [docType, setDocType] = useState<DocumentType>("estimate");
+  const [employees, setEmployees] = useState<Employee[]>([]);
+  const [rates, setRates] = useState<LaborRates>(DEFAULT_LABOR_RATES);
   const today = new Date();
   const docNumber = `${docType === "estimate" ? "EST" : "INV"}-${today.getFullYear()}${String(today.getMonth() + 1).padStart(2, "0")}${String(today.getDate()).padStart(2, "0")}-001`;
+
+  useEffect(() => {
+    getActiveEmployees()
+      .then(setEmployees)
+      .catch(() => setEmployees([]));
+    getLaborRates()
+      .then(setRates)
+      .catch(() => setRates(DEFAULT_LABOR_RATES));
+  }, []);
 
   const buildInvoiceLines = (): InvoiceLine[] => {
     const lines: InvoiceLine[] = [];
@@ -72,16 +89,16 @@ export default function InvoicePreviewStep({
 
     workerStats.forEach((s, worker) => {
       if (s.regular > 0) {
-        lines.push({ no: no++, category: "作業費", description: `作業費（${worker}・時間内）`, quantity: s.regular.toFixed(1), unit: "h", unitPrice: REGULAR_RATE, amount: Math.round(s.regular * REGULAR_RATE) });
+        lines.push({ no: no++, category: "作業費", description: `作業費（${worker}・時間内）`, quantity: s.regular.toFixed(1), unit: "h", unitPrice: rates.regular, amount: Math.round(s.regular * rates.regular) });
       }
       if (s.overtime > 0) {
-        lines.push({ no: no++, category: "作業費", description: `作業費（${worker}・時間外）`, quantity: s.overtime.toFixed(1), unit: "h", unitPrice: REGULAR_RATE, amount: Math.round(s.overtime * REGULAR_RATE) });
+        lines.push({ no: no++, category: "作業費", description: `作業費（${worker}・時間外）`, quantity: s.overtime.toFixed(1), unit: "h", unitPrice: rates.regular, amount: Math.round(s.overtime * rates.regular) });
       }
       if (s.holiday > 0) {
-        lines.push({ no: no++, category: "作業費", description: `作業費（${worker}・休日）`, quantity: s.holiday.toFixed(1), unit: "h", unitPrice: HOLIDAY_RATE, amount: Math.round(s.holiday * HOLIDAY_RATE) });
+        lines.push({ no: no++, category: "作業費", description: `作業費（${worker}・休日）`, quantity: s.holiday.toFixed(1), unit: "h", unitPrice: rates.holiday, amount: Math.round(s.holiday * rates.holiday) });
       }
       if (s.travel > 0) {
-        const rate = Math.round(REGULAR_RATE * TRAVEL_RATE);
+        const rate = travelHourlyRate(rates);
         lines.push({ no: no++, category: "作業費", description: `移動費（${worker}）`, quantity: s.travel.toFixed(1), unit: "h", unitPrice: rate, amount: Math.round(s.travel * rate) });
       }
     });
@@ -93,7 +110,7 @@ export default function InvoicePreviewStep({
         category: "材料費",
         description: `${m.productName}${m.modelType ? ` (${m.modelType})` : ""}`,
         quantity: String(m.quantity),
-        unit: "個",
+        unit: m.unit || "個",
         unitPrice: m.sellingPrice,
         amount: m.sellingTotal,
       });
@@ -162,8 +179,8 @@ export default function InvoicePreviewStep({
   <div class="header"><h1>${docTitle}</h1></div>
   <div class="meta">
     <div class="meta-left">
-      <div class="customer">${basicInfo.customer} 御中</div>
-      <div class="subject">件名：船舶「${basicInfo.shipName}」${basicInfo.category || "修理工事"}</div>
+      <div class="customer">${escapeHtml(basicInfo.customer)} 御中</div>
+      <div class="subject">件名：船舶「${escapeHtml(basicInfo.shipName)}」${escapeHtml(basicInfo.category) || "修理工事"}</div>
     </div>
     <div class="meta-right">
       <div>No. ${docNumber}</div>
@@ -180,8 +197,8 @@ export default function InvoicePreviewStep({
     <tbody>
       ${lines.map((l, i) => {
         const showCategory = i === 0 || lines[i - 1].category !== l.category;
-        return `${showCategory ? `<tr class="category-row"><td colspan="6">【${l.category}】</td></tr>` : ""}
-          <tr><td class="center">${l.no}</td><td>${l.description}</td><td class="num">${l.quantity}</td><td class="center">${l.unit}</td><td class="num">¥${l.unitPrice.toLocaleString()}</td><td class="num">¥${l.amount.toLocaleString()}</td></tr>`;
+        return `${showCategory ? `<tr class="category-row"><td colspan="6">【${escapeHtml(l.category)}】</td></tr>` : ""}
+          <tr><td class="center">${l.no}</td><td>${escapeHtml(l.description)}</td><td class="num">${escapeHtml(l.quantity)}</td><td class="center">${escapeHtml(l.unit)}</td><td class="num">¥${l.unitPrice.toLocaleString()}</td><td class="num">¥${l.amount.toLocaleString()}</td></tr>`;
       }).join("")}
     </tbody>
   </table>
@@ -245,6 +262,12 @@ export default function InvoicePreviewStep({
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, docType === "estimate" ? "見積書" : "請求書");
     XLSX.writeFile(wb, `${docNumber}.xlsx`);
+  };
+
+  const handleReportWorkbookExport = async () => {
+    const payload = { basicInfo, workDayEntries, materials };
+    if (!confirmReportCapacity(payload, "all")) return;
+    await downloadReportWorkbook(payload, employees.map((e) => e.name), "all", rates);
   };
 
   return (
@@ -388,7 +411,7 @@ export default function InvoicePreviewStep({
       </div>
 
       {/* 出力ボタン */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
         <Button onClick={handlePrintPDF} className="h-14 text-base" variant="default">
           <FileText className="w-5 h-5 mr-2" />
           PDF出力（印刷）
@@ -396,6 +419,10 @@ export default function InvoicePreviewStep({
         <Button onClick={handleExcelExport} className="h-14 text-base" variant="outline">
           <FileSpreadsheet className="w-5 h-5 mr-2" />
           Excel出力
+        </Button>
+        <Button onClick={handleReportWorkbookExport} className="h-14 text-base" variant="outline">
+          <FileSpreadsheet className="w-5 h-5 mr-2" />
+          帳票一式をExcel出力
         </Button>
       </div>
 

@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // 帳票スクリプト（scripts/render_sample.mjs）の一時ビルド出力
+    ".tmp-report-build/**",
   ]),
 ]);
 

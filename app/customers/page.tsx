@@ -13,6 +13,7 @@ import {
   toggleCustomerActive,
 } from "@/lib/customerMaster";
 import CustomerFormDialog from "@/components/customers/CustomerFormDialog";
+import AdminGate from "@/components/AdminGate";
 
 type DialogState =
   | { mode: "closed" }
@@ -20,6 +21,14 @@ type DialogState =
   | { mode: "edit"; customer: Customer };
 
 export default function CustomersPage() {
+  return (
+    <AdminGate>
+      <CustomersPageInner />
+    </AdminGate>
+  );
+}
+
+function CustomersPageInner() {
   const router = useRouter();
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);

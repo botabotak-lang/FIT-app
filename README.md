@@ -90,6 +90,13 @@ npm run dev
 - プロジェクトの SQL Editor で [`supabase/ship_cases.sql`](supabase/ship_cases.sql) を実行（顧客・社員・製品と同じプロジェクト）。
 - `.env.local` に `NEXT_PUBLIC_SUPABASE_URL` と `NEXT_PUBLIC_SUPABASE_ANON_KEY` を設定。
 
+### Phase C（単位・工賃単価・管理画面の保護）
+- SQL Editor で [`supabase/phase_c_unit_settings.sql`](supabase/phase_c_unit_settings.sql) を実行（`products.unit` 追加＋`app_settings` 新設）。
+  - 未実行でもアプリは動く（単位は空欄・工賃単価は既定値 7,000 / 8,400 / 0.8）。
+- 工賃単価は画面の **設定**（`/settings`）で変更する。`app_settings` の `labor_rates` に保存される。
+- `.env.local` に `NEXT_PUBLIC_ADMIN_PASSWORD` を設定すると、製品／顧客／社員／設定の各画面でパスワードを聞く（同じタブの間は再入力不要）。空・未設定なら保護なし。
+  - ビルド時に埋め込む値との照合なので、社内の誤操作を防ぐレベルの保護。
+
 ---
 
 ## 📊 使い方（ウィザード）

@@ -13,6 +13,7 @@ import {
   toggleEmployeeActive,
 } from "@/lib/employeeMaster";
 import EmployeeFormDialog from "@/components/employees/EmployeeFormDialog";
+import AdminGate from "@/components/AdminGate";
 
 type DialogState =
   | { mode: "closed" }
@@ -20,6 +21,14 @@ type DialogState =
   | { mode: "edit"; employee: Employee };
 
 export default function EmployeesPage() {
+  return (
+    <AdminGate>
+      <EmployeesPageInner />
+    </AdminGate>
+  );
+}
+
+function EmployeesPageInner() {
   const router = useRouter();
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [loading, setLoading] = useState(true);

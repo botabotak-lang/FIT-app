@@ -1,5 +1,5 @@
-import type { ShipCase, TimeBlock, TimeBlockKind, WorkDayEntry, TimeRange, Worker } from "./types";
-import { REGULAR_RATE, HOLIDAY_RATE, TRAVEL_RATE } from "./types";
+import type { Material, ShipCase, TimeBlock, TimeBlockKind, WorkDayEntry, TimeRange, Worker } from "./types";
+import { DEFAULT_LABOR_RATES, type LaborRates } from "./laborRates";
 
 export function newTimeBlockId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
@@ -51,27 +51,35 @@ export function normalizeWorkDayEntry(entry: WorkDayEntry | Record<string, unkno
   };
 }
 
-/** 工賃（休憩は0） */
-export function calcLaborCostForEntry(entry: WorkDayEntry): number {
-  let sum = 0;
-  for (const b of entry.blocks) {
-    const h = calcBlockHours(b);
-    if (h <= 0) continue;
-    switch (b.kind) {
-      case "break":
-        break;
-      case "travel":
-        sum += h * REGULAR_RATE * TRAVEL_RATE;
-        break;
-      case "regular":
-      case "overtime":
-        sum += h * REGULAR_RATE;
-        break;
-      case "holiday":
-        sum += h * HOLIDAY_RATE;
-        break;
-    }
+/** 時間ブロック1つ分の工賃（休憩は0・端数は丸めない） */
+export function calcBlockCost(
+  block: Pick<TimeBlock, "kind" | "start" | "end">,
+  rates: LaborRates = DEFAULT_LABOR_RATES
+): number {
+  const h = calcBlockHours(block);
+  if (h <= 0) return 0;
+  switch (block.kind) {
+    case "break":
+      return 0;
+    case "travel":
+      return h * rates.regular * rates.travelFactor;
+    case "regular":
+    case "overtime":
+      return h * rates.regular;
+    case "holiday":
+      return h * rates.holiday;
+    default:
+      return 0;
   }
+}
+
+/** 工賃（休憩は0） */
+export function calcLaborCostForEntry(
+  entry: WorkDayEntry,
+  rates: LaborRates = DEFAULT_LABOR_RATES
+): number {
+  let sum = 0;
+  for (const b of entry.blocks) sum += calcBlockCost(b, rates);
   return Math.round(sum);
 }
 
@@ -90,9 +98,16 @@ export function aggregateRangesForKind(entry: WorkDayEntry, kind: TimeBlockKind)
     .join(" / ");
 }
 
+/** 旧データには unit が無い（Phase C で追加） */
+export function normalizeMaterial(material: Material | Record<string, unknown>): Material {
+  const m = material as Material & Record<string, unknown>;
+  return { ...m, unit: typeof m.unit === "string" ? m.unit : "" };
+}
+
 export function normalizeShipCase(c: ShipCase): ShipCase {
   return {
     ...c,
     workDayEntries: (c.workDayEntries || []).map((e) => normalizeWorkDayEntry(e)),
+    materials: (c.materials || []).map((m) => normalizeMaterial(m)),
   };
 }

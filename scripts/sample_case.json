@@ -1,0 +1,335 @@
+{
+  "id": "sample-phase-b",
+  "createdAt": "2026-08-30T00:00:00.000Z",
+  "updatedAt": "2026-08-30T00:00:00.000Z",
+  "status": "materials_added",
+  "basicInfo": {
+    "customer": "サンプル海運",
+    "shipName": "第一テスト丸",
+    "category": "サンプル工事",
+    "modelName": "TEST-100",
+    "manufacturer": "サンプル電機",
+    "receptionDate": "2026-01-22"
+  },
+  "selectedWorkers": [],
+  "workDayEntries": [
+    {
+      "id": "w1",
+      "date": "2026-01-22",
+      "workers": [
+        "大竹"
+      ],
+      "location": "サンプル港",
+      "workContent": "・機器の取付位置を確認し、取付可否を判断した。\n　既存架台の寸法が合わないため、加工が必要と判断した。\n・必要な部材を確認し、手配を依頼した。",
+      "blocks": [
+        {
+          "id": "b1",
+          "kind": "travel",
+          "start": "08:00",
+          "end": "09:00"
+        },
+        {
+          "id": "b2",
+          "kind": "regular",
+          "start": "09:00",
+          "end": "12:00"
+        },
+        {
+          "id": "b3",
+          "kind": "break",
+          "start": "12:00",
+          "end": "13:00"
+        },
+        {
+          "id": "b4",
+          "kind": "regular",
+          "start": "13:00",
+          "end": "15:00"
+        }
+      ]
+    },
+    {
+      "id": "w2",
+      "date": "2026-01-30",
+      "workers": [
+        "大竹",
+        "豊島"
+      ],
+      "location": "サンプル造船所",
+      "workContent": "・ケーブルを船内に引き込むためグランドを取り付けた。\n・配線を仮固定し、導通を確認した。",
+      "blocks": [
+        {
+          "id": "b5",
+          "kind": "regular",
+          "start": "11:00",
+          "end": "12:00"
+        },
+        {
+          "id": "b6",
+          "kind": "overtime",
+          "start": "17:00",
+          "end": "19:00"
+        }
+      ]
+    },
+    {
+      "id": "w3",
+      "date": "2026-02-05",
+      "workers": [
+        "鈴木"
+      ],
+      "location": "サンプル港",
+      "workContent": "・動作確認を行い、正常に受信することを確認した。",
+      "blocks": [
+        {
+          "id": "b7",
+          "kind": "holiday",
+          "start": "09:00",
+          "end": "12:00"
+        }
+      ]
+    }
+  ],
+  "materials": [
+    {
+      "id": "m1",
+      "date": "2026-01-23",
+      "productName": "サンプルボルト",
+      "modelType": "W1/4(40)",
+      "isStock": false,
+      "supplier": "モノタロウ",
+      "quantity": 6,
+      "purchasePrice": 77.27,
+      "purchaseTotal": 463.62,
+      "sellingPrice": 120,
+      "sellingTotal": 720,
+      "shippingFee": 0,
+      "carrier": "大竹",
+      "unit": "本"
+    },
+    {
+      "id": "m2",
+      "date": "2026-01-30",
+      "productName": "サンプルグランド",
+      "modelType": "30φ",
+      "isStock": true,
+      "supplier": "モノタロウ",
+      "quantity": 1,
+      "purchasePrice": 0,
+      "purchaseTotal": 0,
+      "sellingPrice": 0,
+      "sellingTotal": 0,
+      "shippingFee": 0,
+      "carrier": "大竹",
+      "unit": "個"
+    },
+    {
+      "id": "m3",
+      "date": "2026-01-30",
+      "productName": "サンプルケーブル",
+      "modelType": "5D-FB",
+      "isStock": false,
+      "supplier": "アマゾン",
+      "quantity": 20,
+      "purchasePrice": 150,
+      "purchaseTotal": 3000,
+      "sellingPrice": 240,
+      "sellingTotal": 4800,
+      "shippingFee": 800,
+      "carrier": "大竹",
+      "unit": "m"
+    },
+    {
+      "id": "m4",
+      "date": "2026-01-31",
+      "productName": "サンプル端子",
+      "modelType": "M4",
+      "isStock": true,
+      "supplier": "ハードストック",
+      "quantity": 10,
+      "purchasePrice": 30,
+      "purchaseTotal": 300,
+      "sellingPrice": 50,
+      "sellingTotal": 500,
+      "shippingFee": 0,
+      "carrier": "大竹",
+      "unit": "個"
+    },
+    {
+      "id": "m5",
+      "date": "2026-02-01",
+      "productName": "サンプル金具",
+      "modelType": "TS-01",
+      "isStock": false,
+      "supplier": "JRC",
+      "quantity": 2,
+      "purchasePrice": 2500,
+      "purchaseTotal": 5000,
+      "sellingPrice": 3800,
+      "sellingTotal": 7600,
+      "shippingFee": 0,
+      "carrier": "大竹",
+      "unit": "台"
+    },
+    {
+      "id": "m6",
+      "date": "2026-02-01",
+      "productName": "サンプルパイプ",
+      "modelType": "48.6φ",
+      "isStock": false,
+      "supplier": "モノタロウ",
+      "quantity": 1,
+      "purchasePrice": 4200,
+      "purchaseTotal": 4200,
+      "sellingPrice": 6300,
+      "sellingTotal": 6300,
+      "shippingFee": 500,
+      "carrier": "大竹",
+      "unit": "本"
+    },
+    {
+      "id": "m7",
+      "date": "2026-02-02",
+      "productName": "サンプルテープ",
+      "modelType": "19mm",
+      "isStock": true,
+      "supplier": "その他",
+      "quantity": 3,
+      "purchasePrice": 180,
+      "purchaseTotal": 540,
+      "sellingPrice": 280,
+      "sellingTotal": 840,
+      "shippingFee": 0,
+      "carrier": "大竹",
+      "unit": "巻"
+    },
+    {
+      "id": "m8",
+      "date": "2026-02-02",
+      "productName": "サンプルヒューズ",
+      "modelType": "10A",
+      "isStock": false,
+      "supplier": "アマゾン",
+      "quantity": 5,
+      "purchasePrice": 90,
+      "purchaseTotal": 450,
+      "sellingPrice": 150,
+      "sellingTotal": 750,
+      "shippingFee": 0,
+      "carrier": "大竹",
+      "unit": "個"
+    },
+    {
+      "id": "m9",
+      "date": "2026-02-03",
+      "productName": "サンプルコネクタ",
+      "modelType": "N-P",
+      "isStock": false,
+      "supplier": "JRC",
+      "quantity": 4,
+      "purchasePrice": 600,
+      "purchaseTotal": 2400,
+      "sellingPrice": 950,
+      "sellingTotal": 3800,
+      "shippingFee": 0,
+      "carrier": "大竹",
+      "unit": "個"
+    },
+    {
+      "id": "m10",
+      "date": "2026-02-03",
+      "productName": "サンプルシール材",
+      "modelType": "SS-20",
+      "isStock": true,
+      "supplier": "ハードストック",
+      "quantity": 1,
+      "purchasePrice": 800,
+      "purchaseTotal": 800,
+      "sellingPrice": 1200,
+      "sellingTotal": 1200,
+      "shippingFee": 0,
+      "carrier": "大竹",
+      "unit": "本"
+    },
+    {
+      "id": "m11",
+      "date": "2026-02-04",
+      "productName": "サンプルナット",
+      "modelType": "M6",
+      "isStock": false,
+      "supplier": "モノタロウ",
+      "quantity": 20,
+      "purchasePrice": 15,
+      "purchaseTotal": 300,
+      "sellingPrice": 30,
+      "sellingTotal": 600,
+      "shippingFee": 0,
+      "carrier": "大竹",
+      "unit": "個"
+    },
+    {
+      "id": "m12",
+      "date": "2026-02-04",
+      "productName": "サンプルワッシャー",
+      "modelType": "M6",
+      "isStock": false,
+      "supplier": "モノタロウ",
+      "quantity": 20,
+      "purchasePrice": 8,
+      "purchaseTotal": 160,
+      "sellingPrice": 20,
+      "sellingTotal": 400,
+      "shippingFee": 0,
+      "carrier": "大竹",
+      "unit": "個"
+    },
+    {
+      "id": "m13",
+      "date": "2026-02-05",
+      "productName": "サンプル結束バンド",
+      "modelType": "200mm",
+      "isStock": true,
+      "supplier": "その他",
+      "quantity": 50,
+      "purchasePrice": 6,
+      "purchaseTotal": 300,
+      "sellingPrice": 12,
+      "sellingTotal": 600,
+      "shippingFee": 0,
+      "carrier": "鈴木",
+      "unit": "袋"
+    },
+    {
+      "id": "m14",
+      "date": "2026-02-05",
+      "productName": "サンプル絶縁テープ",
+      "modelType": "19mm",
+      "isStock": false,
+      "supplier": "アマゾン",
+      "quantity": 2,
+      "purchasePrice": 200,
+      "purchaseTotal": 400,
+      "sellingPrice": 320,
+      "sellingTotal": 640,
+      "shippingFee": 0,
+      "carrier": "鈴木",
+      "unit": "巻"
+    },
+    {
+      "id": "m15",
+      "date": "2026-02-05",
+      "productName": "サンプル防水キャップ",
+      "modelType": "TC-30",
+      "isStock": false,
+      "supplier": "JRC",
+      "quantity": 3,
+      "purchasePrice": 450,
+      "purchaseTotal": 1350,
+      "sellingPrice": 700,
+      "sellingTotal": 2100,
+      "shippingFee": 600,
+      "carrier": "鈴木",
+      "unit": "個"
+    }
+  ]
+}

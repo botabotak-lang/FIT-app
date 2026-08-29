@@ -18,7 +18,7 @@ import {
   isSupabaseConfigured,
 } from "@/lib/caseRepository";
 import LocalCasesImportBanner from "@/components/LocalCasesImportBanner";
-import { Plus, Ship, ChevronDown, ChevronRight, Trash2, FileText, Package, Building2, Users } from "lucide-react";
+import { Plus, Ship, ChevronDown, ChevronRight, Trash2, FileText, Package, Building2, Users, Settings } from "lucide-react";
 
 const STATUS_CONFIG: Record<CaseStatus, { label: string; color: string }> = {
   draft: { label: "作業中", color: "bg-yellow-100 text-yellow-800" },
@@ -343,6 +343,14 @@ export default function HomePage() {
             >
               <Users className="w-4 h-4 mr-1" />
               社員
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => router.push("/settings")}
+            >
+              <Settings className="w-4 h-4 mr-1" />
+              設定
             </Button>
             <Button onClick={() => router.push("/case/new")}>
               <Plus className="w-4 h-4 mr-2" />

@@ -18,6 +18,19 @@ export const WORK_REPORT_TABLE_HEADERS = [
 /** 明細の最低行数（印刷・Excel で一致） */
 export const WORK_REPORT_MIN_BODY_ROWS = 15;
 
+const HTML_ESCAPES: Record<string, string> = {
+  "&": "&amp;",
+  "<": "&lt;",
+  ">": "&gt;",
+  '"': "&quot;",
+  "'": "&#39;",
+};
+
+/** 印刷用HTMLに埋め込むユーザー入力は必ずこれを通す（改行は pre-wrap で表示） */
+export function escapeHtml(value: unknown): string {
+  return String(value ?? "").replace(/[&<>"']/g, (c) => HTML_ESCAPES[c]);
+}
+
 function toReiwa(dateStr: string): string {
   if (!dateStr) return "";
   const d = new Date(dateStr);
@@ -40,21 +53,6 @@ export function sortWorkDayEntries(entries: WorkDayEntry[]): WorkDayEntry[] {
   return [...entries].sort((a, b) => a.date.localeCompare(b.date));
 }
 
-/** 船名・科目・型名・製造者（Excel 8列・印刷 info 行と同じ並び） */
-export function buildWorkReportInfoRow(basic: BasicInfo): string[] {
-  const empty = "　";
-  return [
-    "船名",
-    basic.shipName || empty,
-    "科目",
-    basic.category || empty,
-    "型名",
-    basic.modelName || empty,
-    "製造者",
-    basic.manufacturer || empty,
-  ];
-}
-
 /** 1行 = 1作業日（データ行のみ） */
 export function buildWorkReportDataRows(sorted: WorkDayEntry[]): string[][] {
   return sorted.map((e) => [
@@ -68,45 +66,6 @@ export function buildWorkReportDataRows(sorted: WorkDayEntry[]): string[][] {
     e.workContent,
   ]);
 }
-
-export function buildWorkReportBlankRows(
-  dataRowCount: number
-): string[][] {
-  const blankCount = Math.max(0, WORK_REPORT_MIN_BODY_ROWS - dataRowCount);
-  return Array.from({ length: blankCount }, () => Array<string>(8).fill(""));
-}
-
-/** Excel 用：タイトル行（A〜G タイトル、H 年） */
-export function buildWorkReportTitleRow(yearLabel: string): (string | number)[] {
-  return [WORK_REPORT_TITLE_SPACED, "", "", "", "", "", "", yearLabel];
-}
-
-/** Excel 用：タイトル行の結合（0行 0〜6列） */
-export const WORK_REPORT_TITLE_MERGE = {
-  s: { r: 0, c: 0 },
-  e: { r: 0, c: 6 },
-} as const;
-
-/** Excel 用列幅（A:月日, B-E:時間系, F-G:作業者/場所, H-O:作業内容マージセル8列）
- *  ピクセル指定 → ExcelJS width 変換式: width = (pixels - 5) / 7
- */
-export const WORK_REPORT_EXCEL_COLS = [
-  { wch: 5.43 },  // A: 43px
-  { wch: 11.29 }, // B: 84px
-  { wch: 11.29 }, // C: 84px
-  { wch: 11.29 }, // D: 84px
-  { wch: 11.29 }, // E: 84px
-  { wch: 11.0 },  // F: 82px
-  { wch: 11.0 },  // G: 82px
-  { wch: 10.71 }, // H: 80px
-  { wch: 10.71 }, // I: 80px
-  { wch: 10.71 }, // J: 80px
-  { wch: 10.71 }, // K: 80px
-  { wch: 10.71 }, // L: 80px
-  { wch: 10.71 }, // M: 80px
-  { wch: 10.71 }, // N: 80px
-  { wch: 10.71 }, // O: 80px
-];
 
 /** 印刷用テーブルヘッダー HTML（th 内） */
 export function workReportTableHeaderCellsHtml(): string {
@@ -130,14 +89,14 @@ export function workReportBodyRowsHtml(sorted: WorkDayEntry[]): string {
     .map(
       (cells) => `
       <tr>
-        <td class="center">${cells[0]}</td>
-        <td class="center">${cells[1]}</td>
-        <td class="center">${cells[2]}</td>
-        <td class="center">${cells[3]}</td>
-        <td class="center">${cells[4]}</td>
-        <td class="center">${cells[5]}</td>
-        <td class="center">${cells[6]}</td>
-        <td class="work-content">${cells[7]}</td>
+        <td class="center">${escapeHtml(cells[0])}</td>
+        <td class="center">${escapeHtml(cells[1])}</td>
+        <td class="center">${escapeHtml(cells[2])}</td>
+        <td class="center">${escapeHtml(cells[3])}</td>
+        <td class="center">${escapeHtml(cells[4])}</td>
+        <td class="center">${escapeHtml(cells[5])}</td>
+        <td class="center">${escapeHtml(cells[6])}</td>
+        <td class="work-content">${escapeHtml(cells[7])}</td>
       </tr>`
     )
     .join("");

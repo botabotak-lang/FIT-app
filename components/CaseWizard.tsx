@@ -143,6 +143,7 @@ export default function CaseWizard({ initialCase }: Props) {
         return (
           <MaterialsStep
             basicInfo={basicInfo}
+            workDayEntries={workDayEntries}
             materials={materials}
             onMaterialsChange={setMaterials}
           />

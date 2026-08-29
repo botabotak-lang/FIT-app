@@ -52,6 +52,8 @@ export type Material = {
   isStock: boolean;
   supplier: string;
   quantity: number;
+  /** 単位（本・個・袋 等。旧データは ""） */
+  unit: string;
   purchasePrice: number;
   purchaseTotal: number;
   sellingPrice: number;
@@ -62,9 +64,7 @@ export type Material = {
 
 export type DocumentType = "estimate" | "invoice";
 
-export const REGULAR_RATE = 7000;
-export const HOLIDAY_RATE = 8400;
-export const TRAVEL_RATE = 0.8;
+/** 工賃単価は app_settings（lib/laborRates.ts）で管理する */
 
 export type CaseStatus = "draft" | "materials_added" | "invoiced";
 
@@ -82,6 +82,9 @@ export type ShipCase = {
 export const CASES_STORAGE_KEY = "fit_ship_cases";
 
 export const SUPPLIERS = ["モノタロウ", "アマゾン", "ハードストック", "JRC", "その他"];
+
+/** 単位の入力候補（自由入力も可） */
+export const UNIT_OPTIONS = ["本", "個", "袋", "m", "台", "式", "セット", "巻", "箱"];
 
 export const COMPANY_INFO = {
   name: "株式会社エフアイティ",
