@@ -36,7 +36,8 @@ function parseMonthDay(text: string, year: number): string {
 
 /**
  * 作業内容テキストから休憩ブロックを分離
- * formatBreaksForContent の逆変換
+ * 旧様式（休憩を作業内容の先頭へ結合して出力していた頃）の逆変換。
+ * 現行の出力では休憩は結合されないが、過去に出力したExcelを読めるよう残す。
  * 例: 「休憩 08:00~09:00 ／ 作業内容テキスト」
  */
 function parseWorkContent(

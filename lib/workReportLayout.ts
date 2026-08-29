@@ -1,8 +1,5 @@
 import type { BasicInfo, WorkDayEntry } from "./types";
-import {
-  aggregateRangesForKind,
-  formatBreaksForContent,
-} from "./workDayEntry";
+import { aggregateRangesForKind } from "./workDayEntry";
 
 /** 印刷・Excel で共通 */
 export const WORK_REPORT_TITLE_SPACED = "修 理 作 業 報 告 書";
@@ -15,7 +12,7 @@ export const WORK_REPORT_TABLE_HEADERS = [
   "休日",
   "作業者",
   "場　所",
-  "作業内容（休憩は先頭に記載）",
+  "作業内容",
 ] as const;
 
 /** 明細の最低行数（印刷・Excel で一致） */
@@ -68,7 +65,7 @@ export function buildWorkReportDataRows(sorted: WorkDayEntry[]): string[][] {
     aggregateRangesForKind(e, "holiday"),
     (e.workers ?? []).join("、"),
     e.location,
-    formatBreaksForContent(e),
+    e.workContent,
   ]);
 }
 
@@ -122,7 +119,7 @@ export function workReportTableHeaderCellsHtml(): string {
         <th class="col-time">${WORK_REPORT_TABLE_HEADERS[4]}</th>
         <th class="col-worker">${WORK_REPORT_TABLE_HEADERS[5]}</th>
         <th class="col-location">${WORK_REPORT_TABLE_HEADERS[6]}</th>
-        <th class="col-content">作　　業　　内　　容<br><span style="font-weight:normal;font-size:9px">（休憩は先頭に記載）</span></th>
+        <th class="col-content">作　　業　　内　　容</th>
       </tr>`;
 }
 

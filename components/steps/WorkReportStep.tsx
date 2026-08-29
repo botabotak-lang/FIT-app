@@ -71,8 +71,6 @@ export default function WorkReportStep({
     return [...activeWorkerNames, ...Array.from(legacy)];
   }, [activeWorkerNames, workDayEntries, selectedWorkers]);
 
-  const defaultWorkers = selectedWorkers.length > 0 ? [selectedWorkers[0]] : activeWorkerNames.length > 0 ? [activeWorkerNames[0]] : [];
-
   const addEntry = () => {
     const today = new Date();
     const pad = (n: number) => String(n).padStart(2, "0");
@@ -80,7 +78,8 @@ export default function WorkReportStep({
     const newEntry: WorkDayEntry = {
       id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
       date: dateStr,
-      workers: defaultWorkers.length > 0 ? defaultWorkers : workerOptions.length > 0 ? [workerOptions[0]] : [],
+      // 作業者は自動選択しない（毎回明示的に選ばせる）
+      workers: [],
       location: "",
       workContent: "",
       blocks: [],
@@ -361,17 +360,6 @@ export default function WorkReportStep({
                 </div>
               </div>
 
-              <div>
-                <Label className="text-xs text-gray-600">作業内容</Label>
-                <textarea
-                  value={entry.workContent}
-                  onChange={(e) => updateEntry(entry.id, { workContent: e.target.value })}
-                  placeholder="作業内容を入力（改行可。休憩は下の時間ブロックで登録すると印刷・Excelで先頭へ結合されます）"
-                  rows={4}
-                  className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm bg-white resize-y min-h-[5rem] whitespace-pre-wrap focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-
               <div className="space-y-2">
                 <Label className="text-sm font-medium text-gray-800">時間ブロック</Label>
                 {entry.blocks.length === 0 ? (
@@ -452,6 +440,20 @@ export default function WorkReportStep({
                   <Plus className="w-4 h-4 mr-1" />
                   時間を追加
                 </Button>
+              </div>
+
+              <div>
+                <Label className="text-xs text-gray-600">作業内容</Label>
+                <textarea
+                  value={entry.workContent}
+                  onChange={(e) => updateEntry(entry.id, { workContent: e.target.value })}
+                  placeholder="作業内容を入力（改行可）"
+                  rows={4}
+                  className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm bg-white resize-y min-h-[5rem] whitespace-pre-wrap focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  改行1つ＝報告書の1行。1行は全角50文字程度まで（超えた分は印刷で切れます）
+                </p>
               </div>
 
               <div className="flex justify-between items-center pt-2 border-t border-gray-200">

@@ -61,7 +61,7 @@ function tableHeaderValues(): string[] {
     WORK_REPORT_TABLE_HEADERS[4],
     WORK_REPORT_TABLE_HEADERS[5],
     WORK_REPORT_TABLE_HEADERS[6],
-    `作　　業　　内　　容\n（休憩は先頭に記載）`,
+    `作　　業　　内　　容`,
   ];
 }
 

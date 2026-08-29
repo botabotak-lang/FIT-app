@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import BasicInfoStep from "@/components/steps/BasicInfoStep";
@@ -52,8 +52,16 @@ export default function CaseWizard({ initialCase }: Props) {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
-  const caseId = initialCase?.id ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-  const createdAt = initialCase?.createdAt ?? new Date().toISOString();
+  // 新規案件の ID / 作成日時はマウント時に1度だけ決定する。
+  // （レンダーごとに再生成すると、保存のたびに別IDの案件が作られてしまう＝二重保存バグ）
+  const caseIdRef = useRef<string>(
+    initialCase?.id ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`
+  );
+  const createdAtRef = useRef<string>(
+    initialCase?.createdAt ?? new Date().toISOString()
+  );
+  const caseId = caseIdRef.current;
+  const createdAt = createdAtRef.current;
 
   const getCurrentStatus = (): CaseStatus => {
     if (materials.length > 0) return "materials_added";

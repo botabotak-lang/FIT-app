@@ -90,15 +90,6 @@ export function aggregateRangesForKind(entry: WorkDayEntry, kind: TimeBlockKind)
     .join(" / ");
 }
 
-/** 印刷用：休憩を作業内容欄向けに整形 */
-export function formatBreaksForContent(entry: WorkDayEntry): string {
-  const parts = entry.blocks
-    .filter((b) => b.kind === "break" && b.start && b.end)
-    .map((b) => `休憩 ${b.start}~${b.end}`);
-  if (parts.length === 0) return entry.workContent;
-  return [...parts, entry.workContent].filter(Boolean).join(" ／ ");
-}
-
 export function normalizeShipCase(c: ShipCase): ShipCase {
   return {
     ...c,
