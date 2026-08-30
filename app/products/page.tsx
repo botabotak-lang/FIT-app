@@ -81,6 +81,8 @@ function ProductsPageInner() {
 
   const activeProducts = products.filter((p) => p.isActive);
   const inactiveProducts = products.filter((p) => !p.isActive);
+  // 登録済みの仕入先（自由入力で増えた分も含む）を入力候補に回す
+  const knownSuppliers = products.map((p) => p.supplier).filter(Boolean);
 
   return (
     <main className="min-h-screen bg-gray-50 p-4">
@@ -170,6 +172,7 @@ function ProductsPageInner() {
       {dialog.mode !== "closed" && (
         <ProductFormDialog
           product={dialog.mode === "edit" ? dialog.product : undefined}
+          knownSuppliers={knownSuppliers}
           onSubmit={handleSubmit}
           onCancel={() => setDialog({ mode: "closed" })}
         />

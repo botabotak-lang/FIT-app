@@ -1,4 +1,17 @@
 import { supabase } from "./supabase";
+import { dedupeRows, productKey } from "./importProducts";
+
+/** Supabase の 1 リクエストあたりの既定上限。これを超える件数はページングで取る */
+const PAGE_SIZE = 1000;
+
+/** 一括 insert の分割サイズ（1リクエストが大きくなりすぎないように） */
+const INSERT_CHUNK_SIZE = 200;
+
+/**
+ * ページング取得の上限ページ数（安全弁）。想定外の件数でブラウザが
+ * 固まらないよう、ここを超えたらエラーで止める。
+ */
+const MAX_PAGES = 20;
 
 export type Product = {
   id: string;
@@ -84,28 +97,51 @@ function withoutName(payload: ProductPayload): ProductPayload {
   return rest;
 }
 
+/**
+ * products を全件取得する。Supabase は 1 リクエスト 1000 行が既定上限なので、
+ * `.range()` で最後のページまで読み切る（製品マスタは 1000 件を超える）。
+ * ページ間で並びがぶれないよう、name の同値は id で決定的に並べる。
+ */
+async function fetchProductPages(activeOnly: boolean): Promise<DbProduct[]> {
+  const all: DbProduct[] = [];
+  for (let page = 0; page < MAX_PAGES; page++) {
+    const from = page * PAGE_SIZE;
+    const to = from + PAGE_SIZE - 1;
+    const { data, error } = activeOnly
+      ? await supabase
+          .from("products")
+          .select("*")
+          .eq("is_active", true)
+          .order("name")
+          .order("id")
+          .range(from, to)
+      : await supabase
+          .from("products")
+          .select("*")
+          .order("is_active", { ascending: false })
+          .order("name")
+          .order("id")
+          .range(from, to);
+
+    if (error) throw new Error(`製品マスタ取得エラー: ${error.message}`);
+
+    const rows = (data ?? []) as DbProduct[];
+    all.push(...rows);
+    if (rows.length < PAGE_SIZE) return all;
+  }
+  throw new Error(
+    `製品マスタの件数が想定外です（${MAX_PAGES * PAGE_SIZE}件以上）。データを確認してください。`
+  );
+}
+
 /** 有効な製品のみ取得（材料入力ステップで使用） */
 export async function getActiveProducts(): Promise<Product[]> {
-  const { data, error } = await supabase
-    .from("products")
-    .select("*")
-    .eq("is_active", true)
-    .order("name");
-
-  if (error) throw new Error(`製品マスタ取得エラー: ${error.message}`);
-  return (data as DbProduct[]).map(fromDb);
+  return (await fetchProductPages(true)).map(fromDb);
 }
 
 /** 全製品取得（マスタ管理画面で使用） */
 export async function getAllProducts(): Promise<Product[]> {
-  const { data, error } = await supabase
-    .from("products")
-    .select("*")
-    .order("is_active", { ascending: false })
-    .order("name");
-
-  if (error) throw new Error(`製品マスタ取得エラー: ${error.message}`);
-  return (data as DbProduct[]).map(fromDb);
+  return (await fetchProductPages(false)).map(fromDb);
 }
 
 function insertPayload(input: ProductInput): ProductPayload {
@@ -187,23 +223,30 @@ export async function toggleProductActive(
 export type UpsertResult = {
   inserted: number;
   updated: number;
+  /** 同一バッチ内で「品名＋型式」が重複していて1件にまとめた件数 */
+  merged: number;
 };
 
 /**
  * スプレッドシートから取り込んだデータを一括保存。
- * 品名が一致するものは更新、なければ新規追加。
+ * 「品名＋型式」が一致するものは更新、なければ新規追加。
+ * 同一バッチ内で同じキーが複数あるときは後勝ちで 1 件にまとめる。
  */
 export async function upsertProducts(
   inputs: ProductInput[]
 ): Promise<UpsertResult> {
-  const existing = await getAllProducts();
-  const existingByName = new Map(existing.map((p) => [p.name, p]));
+  const { rows: uniqueInputs, merged } = dedupeRows(inputs);
 
-  const toInsert: typeof inputs = [];
+  const existing = await getAllProducts();
+  const existingByKey = new Map(
+    existing.map((p) => [productKey(p.name, p.modelType), p])
+  );
+
+  const toInsert: ProductInput[] = [];
   const toUpdate: { id: string; input: ProductInput }[] = [];
 
-  for (const input of inputs) {
-    const match = existingByName.get(input.name);
+  for (const input of uniqueInputs) {
+    const match = existingByKey.get(productKey(input.name, input.modelType));
     if (match) {
       toUpdate.push({ id: match.id, input });
     } else {
@@ -211,8 +254,9 @@ export async function upsertProducts(
     }
   }
 
-  if (toInsert.length > 0) {
-    const rows = toInsert.map(insertPayload);
+  // 1 リクエストが大きくなりすぎないよう 200 件ずつに分割して登録する
+  for (let i = 0; i < toInsert.length; i += INSERT_CHUNK_SIZE) {
+    const rows = toInsert.slice(i, i + INSERT_CHUNK_SIZE).map(insertPayload);
     let { error } = await supabase.from("products").insert(rows);
     if (isMissingUnitColumn(error)) {
       ({ error } = await supabase.from("products").insert(rows.map(withoutUnit)));
@@ -221,7 +265,7 @@ export async function upsertProducts(
   }
 
   for (const { id, input } of toUpdate) {
-    // 一括更新では品名は変えない（品名で突き合わせているため）
+    // 一括更新では品名は変えない（品名＋型式で突き合わせているため）
     const payload = withoutName(updatePayload(input));
     let { error } = await supabase.from("products").update(payload).eq("id", id);
     if (isMissingUnitColumn(error)) {
@@ -230,5 +274,5 @@ export async function upsertProducts(
     if (error) throw new Error(`一括更新エラー: ${error.message}`);
   }
 
-  return { inserted: toInsert.length, updated: toUpdate.length };
+  return { inserted: toInsert.length, updated: toUpdate.length, merged };
 }

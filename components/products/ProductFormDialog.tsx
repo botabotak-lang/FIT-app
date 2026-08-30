@@ -1,14 +1,16 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Product, ProductInput } from "@/lib/productMaster";
-import { SUPPLIERS, UNIT_OPTIONS } from "@/lib/types";
+import { buildSupplierOptions, UNIT_OPTIONS } from "@/lib/types";
 
 type Props = {
   product?: Product;
+  /** 登録済み製品の仕入先（既定リストと合わせて入力候補にする） */
+  knownSuppliers?: string[];
   onSubmit: (input: ProductInput) => Promise<void>;
   onCancel: () => void;
 };
@@ -23,10 +25,20 @@ const EMPTY_FORM: ProductInput = {
   notes: "",
 };
 
-export default function ProductFormDialog({ product, onSubmit, onCancel }: Props) {
+export default function ProductFormDialog({
+  product,
+  knownSuppliers,
+  onSubmit,
+  onCancel,
+}: Props) {
   const [form, setForm] = useState<ProductInput>(EMPTY_FORM);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const supplierOptions = useMemo(
+    () => buildSupplierOptions(knownSuppliers ?? []),
+    [knownSuppliers]
+  );
 
   useEffect(() => {
     if (product) {
@@ -97,17 +109,18 @@ export default function ProductFormDialog({ product, onSubmit, onCancel }: Props
 
           <div>
             <Label className="text-sm font-medium">仕入先</Label>
-            <select
+            <Input
+              list="product-supplier-options"
               value={form.supplier}
               onChange={(e) => set("supplier", e.target.value)}
-              className="mt-1 w-full border rounded-md px-3 py-2 text-sm bg-white"
-            >
-              {SUPPLIERS.map((s) => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
+              placeholder="例：モノタロウ（候補になければ直接入力）"
+              className="mt-1"
+            />
+            <datalist id="product-supplier-options">
+              {supplierOptions.map((s) => (
+                <option key={s} value={s} />
               ))}
-            </select>
+            </datalist>
           </div>
 
           <div>
@@ -134,6 +147,7 @@ export default function ProductFormDialog({ product, onSubmit, onCancel }: Props
               <Input
                 type="number"
                 min={0}
+                step="any"
                 value={form.purchasePrice || ""}
                 onChange={(e) =>
                   set("purchasePrice", e.target.value === "" ? 0 : Number(e.target.value))
@@ -149,6 +163,7 @@ export default function ProductFormDialog({ product, onSubmit, onCancel }: Props
               <Input
                 type="number"
                 min={0}
+                step="any"
                 value={form.sellingPrice || ""}
                 onChange={(e) =>
                   set("sellingPrice", e.target.value === "" ? 0 : Number(e.target.value))

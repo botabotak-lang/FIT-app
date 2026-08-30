@@ -52,7 +52,7 @@ FIT社向けの船舶修理作業報告システム（Next.js + Tailwind CSS + S
 - 基本情報入力（船名、科目、型名、完成月日）
 - 材料行の追加・削除
 - **履歴学習型Combobox**：商品名を入力すると自動的にLocalStorageに保存され、次回から選択可能
-- 在庫/仕入先の管理（モノタロウ、アマゾン、ハートストック、JRC）
+- 在庫/仕入先の管理（仕入先は候補付きの自由入力。候補＝既定リスト＋製品マスタの登録値）
 - **自動計算機能**：
   - 仕入合計 = 数量 × 仕入単価
   - 売値合計 = 数量 × 売値単価
@@ -96,6 +96,34 @@ npm run dev
 - 工賃単価は画面の **設定**（`/settings`）で変更する。`app_settings` の `labor_rates` に保存される。
 - `.env.local` に `NEXT_PUBLIC_ADMIN_PASSWORD` を設定すると、製品／顧客／社員／設定の各画面でパスワードを聞く（同じタブの間は再入力不要）。空・未設定なら保護なし。
   - ビルド時に埋め込む値との照合なので、社内の誤操作を防ぐレベルの保護。
+
+### Phase D（製品マスタの単価を小数対応）
+- SQL Editor で [`supabase/phase_d_products_price_numeric.sql`](supabase/phase_d_products_price_numeric.sql) を実行（`purchase_price` / `selling_price` を `numeric(12,2)` に変更）。
+  - FIT の実データには 25.7円・0.67円 のような 1円未満の仕入値が 127 行ある。integer のままだと一括取込が失敗する。
+  - 既存データはそのままキャストされる（値は変わらない）。再実行しても安全。
+
+### 適用SQL一覧（Supabase SQL Editor で実行する順）
+
+| # | ファイル | 内容 | 状態 |
+|---|---|---|---|
+| 1 | `supabase/customers_employees.sql` | 顧客・社員・製品マスタ | 適用済み |
+| 2 | `supabase/ship_cases.sql` | 案件のクラウド保存 | 適用済み |
+| 3 | `supabase/phase_c_unit_settings.sql` | `products.unit` 追加＋`app_settings` 新設 | 適用済み |
+| 4 | `supabase/phase_d_products_price_numeric.sql` | 単価を `numeric(12,2)` へ（小数対応） | **未適用（窪田が実行）** |
+
+---
+
+## 🧪 製品マスタ取込のドライラン
+
+本番DBに書き込む前に、Excel が何件取り込まれるかだけを確認できる。
+
+```bash
+node scripts/dry_run_import.mjs "<製品マスタ.xlsx>"
+```
+
+- 画面の「一括取込」と**同じ解析ロジック**（`lib/importProducts.ts`）で読む。
+- 総行数／有効（登録対象）／重複でまとめた件数／エラー理由別／仕入先内訳／小数の仕入値を出力する。
+- **DB には一切書き込まない。**
 
 ---
 

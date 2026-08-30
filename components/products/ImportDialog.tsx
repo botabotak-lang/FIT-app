@@ -1,13 +1,17 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useMemo } from "react";
 import * as XLSX from "xlsx";
 import { Button } from "@/components/ui/button";
 import { Download, Upload, CheckCircle } from "lucide-react";
-import { ProductInput, upsertProducts, UpsertResult } from "@/lib/productMaster";
-import { SUPPLIERS } from "@/lib/types";
+import { upsertProducts, UpsertResult } from "@/lib/productMaster";
+import {
+  ParsedRow,
+  TEMPLATE_COLUMNS,
+  dedupeRows,
+  parseWorkbook,
+} from "@/lib/importProducts";
 
-type ParsedRow = ProductInput & { _error?: string };
 type Step = "upload" | "preview" | "done";
 
 type Props = {
@@ -15,7 +19,11 @@ type Props = {
   onComplete: () => void;
 };
 
-const TEMPLATE_COLUMNS = ["品名", "型式（規格）", "仕入先", "仕入値", "売値", "備考", "単位"];
+/** プレビューで一覧表示する最大行数（735件でも描画が重くならないように） */
+const PREVIEW_LIMIT = 200;
+
+/** エラー行の表示上限 */
+const ERROR_PREVIEW_LIMIT = 20;
 
 function downloadTemplate() {
   const sampleRows = [
@@ -30,54 +38,9 @@ function downloadTemplate() {
   XLSX.writeFile(wb, "製品マスタ_テンプレート.xlsx");
 }
 
-const SKIP_SHEETS = ["製品マスタ 例"];
-
-/** ヘッダー行から「単位」列の位置を探す（列順は問わない。無ければ -1） */
-function findUnitColumn(header: unknown[]): number {
-  return header.findIndex((cell) => String(cell ?? "").trim().replace(/\s/g, "") === "単位");
-}
-
-function parseSheet(data: unknown[][]): ParsedRow[] {
-  if (data.length < 2) return [];
-  const unitIndex = findUnitColumn(data[0] ?? []);
-  const rows = data.slice(1);
-  return rows
-    .filter((r) => r.some((v) => v !== "" && v !== null && v !== undefined))
-    .map((r) => {
-      const name = String(r[0] ?? "").replace(/[\r\n]/g, " ").trim();
-      const modelType = String(r[1] ?? "").replace(/[\r\n]/g, " ").trim();
-      const supplierRaw = String(r[2] ?? "").trim();
-      const supplier = SUPPLIERS.includes(supplierRaw) ? supplierRaw : "その他";
-      const purchasePrice = Number(r[3]) || 0;
-
-      const sellingRaw = String(r[4] ?? "").trim();
-      const sellingParsed = Number(r[4]);
-      const sellingUnknown = sellingRaw === "" || isNaN(sellingParsed);
-      const sellingPrice = sellingUnknown ? 0 : sellingParsed;
-
-      const unit = unitIndex >= 0 ? String(r[unitIndex] ?? "").trim() : "";
-
-      const notesBase = String(r[5] ?? "").replace(/[\r\n]/g, " ").trim();
-      const notes = sellingUnknown
-        ? notesBase ? `${notesBase}・売値要確認` : "売値要確認"
-        : notesBase;
-
-      const errors: string[] = [];
-      if (!name) errors.push("品名が空");
-      if (purchasePrice <= 0) errors.push("仕入単価が0以下");
-      if (!sellingUnknown && sellingPrice <= 0) errors.push("売値単価が0以下");
-
-      return {
-        name,
-        modelType,
-        supplier,
-        unit,
-        purchasePrice,
-        sellingPrice,
-        notes,
-        _error: errors.length > 0 ? errors.join("、") : undefined,
-      };
-    });
+/** 小数の単価もそのまま見せる（例 25.7円・0.67円） */
+function formatPrice(value: number): string {
+  return value.toLocaleString(undefined, { maximumFractionDigits: 2 });
 }
 
 export default function ImportDialog({ onClose, onComplete }: Props) {
@@ -97,13 +60,7 @@ export default function ImportDialog({ onClose, onComplete }: Props) {
     reader.onload = (ev) => {
       try {
         const wb = XLSX.read(ev.target?.result, { type: "binary" });
-        const allRows: ParsedRow[] = [];
-        for (const sheetName of wb.SheetNames) {
-          if (SKIP_SHEETS.includes(sheetName)) continue;
-          const ws = wb.Sheets[sheetName];
-          const data = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1 });
-          allRows.push(...parseSheet(data));
-        }
+        const allRows = parseWorkbook(wb);
         if (allRows.length === 0) {
           setError("データが見つかりませんでした。テンプレートの形式を確認してください。");
           return;
@@ -117,14 +74,20 @@ export default function ImportDialog({ onClose, onComplete }: Props) {
     reader.readAsBinaryString(file);
   };
 
-  const validRows = rows.filter((r) => !r._error);
-  const errorRows = rows.filter((r) => r._error);
+  const parsedRows = useMemo(() => rows.filter((r) => !r.error), [rows]);
+  const errorRows = useMemo(() => rows.filter((r) => r.error), [rows]);
+  // 「品名＋型式」が同じ行は後勝ちで1件にまとめる（登録も同じ規則）
+  const { rows: validRows, merged } = useMemo(
+    () => dedupeRows(parsedRows),
+    [parsedRows]
+  );
 
   const handleConfirm = async () => {
     setSubmitting(true);
     setError(null);
     try {
-      const res = await upsertProducts(validRows);
+      // 重複のまとめは upsertProducts 側で行う（完了画面の件数と一致させるため）
+      const res = await upsertProducts(parsedRows);
       setResult(res);
       setStep("done");
     } catch (err) {
@@ -183,10 +146,15 @@ export default function ImportDialog({ onClose, onComplete }: Props) {
 
         {step === "preview" && (
           <div className="space-y-4">
-            <div className="flex gap-3 text-sm">
+            <div className="flex flex-wrap gap-2 text-sm">
               <span className="bg-green-100 text-green-800 px-3 py-1 rounded-full font-medium">
                 取り込み可能 {validRows.length}件
               </span>
+              {merged > 0 && (
+                <span className="bg-amber-100 text-amber-800 px-3 py-1 rounded-full font-medium">
+                  重複 {merged}件をまとめ
+                </span>
+              )}
               {errorRows.length > 0 && (
                 <span className="bg-red-100 text-red-800 px-3 py-1 rounded-full font-medium">
                   エラー {errorRows.length}件（スキップ）
@@ -200,37 +168,47 @@ export default function ImportDialog({ onClose, onComplete }: Props) {
                   <tr>
                     <th className="text-left px-3 py-2">品名</th>
                     <th className="text-left px-3 py-2">型式</th>
+                    <th className="text-left px-3 py-2">仕入先</th>
                     <th className="text-left px-3 py-2">単位</th>
                     <th className="text-right px-3 py-2">仕入単価</th>
                     <th className="text-right px-3 py-2">売値単価</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {validRows.map((r, i) => (
-                    <tr key={i} className="border-t">
+                  {validRows.slice(0, PREVIEW_LIMIT).map((r, i) => (
+                    <tr key={`${r.sheetName}-${r.rowNumber}-${i}`} className="border-t">
                       <td className="px-3 py-2">{r.name}</td>
                       <td className="px-3 py-2 text-gray-500">{r.modelType}</td>
+                      <td className="px-3 py-2 text-gray-500">{r.supplier}</td>
                       <td className="px-3 py-2 text-gray-500">{r.unit}</td>
                       <td className="px-3 py-2 text-right">
-                        ¥{r.purchasePrice.toLocaleString()}
+                        ¥{formatPrice(r.purchasePrice)}
                       </td>
                       <td className="px-3 py-2 text-right">
-                        ¥{r.sellingPrice.toLocaleString()}
+                        ¥{formatPrice(r.sellingPrice)}
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
+            {validRows.length > PREVIEW_LIMIT && (
+              <p className="text-xs text-gray-500">
+                先頭 {PREVIEW_LIMIT}件のみ表示しています（登録は {validRows.length}件すべて）
+              </p>
+            )}
 
             {errorRows.length > 0 && (
               <div className="text-xs text-red-600 bg-red-50 rounded p-3 space-y-1">
                 <p className="font-semibold">スキップされる行：</p>
-                {errorRows.map((r, i) => (
-                  <p key={i}>
-                    {r.name || "（品名なし）"} — {r._error}
+                {errorRows.slice(0, ERROR_PREVIEW_LIMIT).map((r, i) => (
+                  <p key={`${r.sheetName}-${r.rowNumber}-${i}`}>
+                    [{r.sheetName} {r.rowNumber}行目] {r.name || "（品名なし）"} — {r.error}
                   </p>
                 ))}
+                {errorRows.length > ERROR_PREVIEW_LIMIT && (
+                  <p>ほか {errorRows.length - ERROR_PREVIEW_LIMIT}件</p>
+                )}
               </div>
             )}
 
@@ -239,7 +217,7 @@ export default function ImportDialog({ onClose, onComplete }: Props) {
             )}
 
             <p className="text-xs text-gray-500">
-              ※ 同じ品名がすでに登録されている場合は上書き更新されます
+              ※ 品名＋型式が同じ製品がすでに登録されている場合は上書き更新されます
             </p>
 
             <div className="flex gap-3">
@@ -270,6 +248,11 @@ export default function ImportDialog({ onClose, onComplete }: Props) {
               <p className="text-sm text-gray-600">
                 新規追加 {result.inserted}件 ／ 更新 {result.updated}件
               </p>
+              {result.merged > 0 && (
+                <p className="text-sm text-gray-600">
+                  重複{result.merged}件を1件にまとめました
+                </p>
+              )}
             </div>
             <Button className="w-full" onClick={onComplete}>
               製品一覧に戻る

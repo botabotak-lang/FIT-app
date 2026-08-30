@@ -45,3 +45,6 @@ next-env.d.ts
 
 # 帳票スクリプトの一時ビルド
 /.tmp-report-build/
+
+# 取込ドライランの一時ビルド
+/.tmp-import-build/

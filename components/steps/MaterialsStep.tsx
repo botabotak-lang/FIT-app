@@ -1,15 +1,33 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { FileSpreadsheet, X } from "lucide-react";
-import { BasicInfo, Material, SUPPLIERS, UNIT_OPTIONS, WorkDayEntry } from "@/lib/types";
+import { BasicInfo, Material, buildSupplierOptions, UNIT_OPTIONS, WorkDayEntry } from "@/lib/types";
 import { Product, getActiveProducts } from "@/lib/productMaster";
 import { getActiveEmployees, Employee } from "@/lib/employeeMaster";
 import { confirmReportCapacity, downloadReportWorkbook } from "@/lib/reportWorkbook";
 import { DEFAULT_LABOR_RATES, getLaborRates, type LaborRates } from "@/lib/laborRates";
+
+/** 候補リストに一度に描画する最大件数（製品マスタが数百〜千件でも重くならないように） */
+const SUGGEST_LIMIT = 50;
+
+/** 検索用のキー。全角半角・大文字小文字・空白の差を無視して部分一致させる */
+function searchKey(value: string): string {
+  return value.normalize("NFKC").replace(/[\s　]/g, "").toLowerCase();
+}
+
+/** 小数の単価もそのまま見せる（例 25.7円・0.67円） */
+function formatPrice(value: number): string {
+  return value.toLocaleString(undefined, { maximumFractionDigits: 2 });
+}
+
+/** 小数単価の掛け算で出る浮動小数の誤差を銭単位に丸める */
+function roundYen(value: number): number {
+  return Math.round(value * 100) / 100;
+}
 
 type Props = {
   basicInfo: BasicInfo;
@@ -94,8 +112,9 @@ export default function MaterialsStep({ basicInfo, workDayEntries, materials, on
         const updated = { ...m, [field]: updatedValue };
 
         if (field === "quantity" || field === "purchasePrice" || field === "sellingPrice") {
-          updated.purchaseTotal = Number(updated.quantity) * Number(updated.purchasePrice);
-          updated.sellingTotal = Number(updated.quantity) * Number(updated.sellingPrice);
+          // 単価に小数（例 0.67円）があるので、掛け算の誤差を銭単位で丸める
+          updated.purchaseTotal = roundYen(Number(updated.quantity) * Number(updated.purchasePrice));
+          updated.sellingTotal = roundYen(Number(updated.quantity) * Number(updated.sellingPrice));
         }
 
         if (field === "productName" && typeof value === "string" && value) {
@@ -119,8 +138,8 @@ export default function MaterialsStep({ basicInfo, workDayEntries, materials, on
           unit: m.unit || product.unit || "",
           purchasePrice: product.purchasePrice,
           sellingPrice: product.sellingPrice,
-          purchaseTotal: m.quantity * product.purchasePrice,
-          sellingTotal: m.quantity * product.sellingPrice,
+          purchaseTotal: roundYen(m.quantity * product.purchasePrice),
+          sellingTotal: roundYen(m.quantity * product.sellingPrice),
         };
       })
     );
@@ -130,14 +149,24 @@ export default function MaterialsStep({ basicInfo, workDayEntries, materials, on
   };
 
   const getSuggestions = (materialId: string) => {
-    const query = searchQuery[materialId] || "";
-    const masterMatches = masterProducts.filter(
-      (p) => !query || p.name.includes(query) || p.modelType.includes(query)
-    );
-    const historyMatches = productHistory
-      .filter((h) => !query || h.includes(query))
-      .filter((h) => !masterMatches.some((p) => p.name === h));
-    return { masterMatches, historyMatches };
+    const query = searchKey(searchQuery[materialId] || "");
+    // 品名・型式の部分一致で絞り込む（数百件でも入力すれば数件まで絞れる）
+    const allMasterMatches = query
+      ? masterProducts.filter(
+          (p) =>
+            searchKey(p.name).includes(query) || searchKey(p.modelType).includes(query)
+        )
+      : masterProducts;
+    const allHistoryMatches = productHistory
+      .filter((h) => !query || searchKey(h).includes(query))
+      .filter((h) => !allMasterMatches.some((p) => p.name === h));
+    return {
+      masterMatches: allMasterMatches.slice(0, SUGGEST_LIMIT),
+      historyMatches: allHistoryMatches.slice(0, SUGGEST_LIMIT),
+      hiddenCount:
+        Math.max(0, allMasterMatches.length - SUGGEST_LIMIT) +
+        Math.max(0, allHistoryMatches.length - SUGGEST_LIMIT),
+    };
   };
 
   const calculateTotals = () => {
@@ -153,6 +182,11 @@ export default function MaterialsStep({ basicInfo, workDayEntries, materials, on
 
   const totals = calculateTotals();
   const activeWorkerNames = employees.map((e) => e.name);
+  // 既定リスト＋製品マスタに登録済みの仕入先を入力候補にする
+  const supplierOptions = useMemo(
+    () => buildSupplierOptions(masterProducts.map((p) => p.supplier)),
+    [masterProducts]
+  );
 
   const handleExportMaterialsExcel = async () => {
     const payload = { basicInfo, workDayEntries, materials };
@@ -165,6 +199,11 @@ export default function MaterialsStep({ basicInfo, workDayEntries, materials, on
       <datalist id="material-unit-options">
         {UNIT_OPTIONS.map((u) => (
           <option key={u} value={u} />
+        ))}
+      </datalist>
+      <datalist id="material-supplier-options">
+        {supplierOptions.map((s) => (
+          <option key={s} value={s} />
         ))}
       </datalist>
       <div>
@@ -218,7 +257,7 @@ export default function MaterialsStep({ basicInfo, workDayEntries, materials, on
                 {openSuggest === material.id && (
                   <div className="absolute z-10 w-full mt-1 bg-white border rounded-md shadow-lg max-h-48 overflow-y-auto">
                     {(() => {
-                      const { masterMatches, historyMatches } = getSuggestions(material.id);
+                      const { masterMatches, historyMatches, hiddenCount } = getSuggestions(material.id);
                       return (
                         <>
                           {masterMatches.length > 0 && (
@@ -226,17 +265,22 @@ export default function MaterialsStep({ basicInfo, workDayEntries, materials, on
                               <div className="px-3 py-1 text-xs text-gray-500 bg-gray-50 font-semibold">製品マスタ</div>
                               {masterMatches.map((p) => (
                                 <button
-                                  key={p.name}
+                                  key={p.id}
                                   className="w-full text-left px-3 py-2 hover:bg-blue-50 text-sm border-b"
                                   onMouseDown={() => selectProduct(material.id, p)}
                                 >
                                   <div className="font-medium">{p.name}</div>
                                   <div className="text-xs text-gray-500">
-                                    {p.modelType} | 仕入 ¥{p.purchasePrice.toLocaleString()} → 売値 ¥{p.sellingPrice.toLocaleString()}
+                                    {p.modelType} | {p.supplier} | 仕入 ¥{formatPrice(p.purchasePrice)} → 売値 ¥{formatPrice(p.sellingPrice)}
                                   </div>
                                 </button>
                               ))}
                             </>
+                          )}
+                          {hiddenCount > 0 && (
+                            <div className="px-3 py-2 text-xs text-gray-400">
+                              ほか {hiddenCount}件。品名や型式を入力して絞り込んでください
+                            </div>
                           )}
                           {historyMatches.length > 0 && (
                             <>
@@ -287,15 +331,12 @@ export default function MaterialsStep({ basicInfo, workDayEntries, materials, on
 
               <div>
                 <Label className="text-xs">仕入先</Label>
-                <select
+                <Input
+                  list="material-supplier-options"
                   value={material.supplier}
                   onChange={(e) => updateMaterial(material.id, "supplier", e.target.value)}
-                  className="w-full border rounded-md px-3 py-2 text-sm"
-                >
-                  {SUPPLIERS.map((s) => (
-                    <option key={s} value={s}>{s}</option>
-                  ))}
-                </select>
+                  placeholder="候補になければ直接入力"
+                />
               </div>
 
               <div>
@@ -327,6 +368,7 @@ export default function MaterialsStep({ basicInfo, workDayEntries, materials, on
                   onChange={(e) => updateMaterial(material.id, "purchasePrice", e.target.value)}
                   onFocus={(e) => e.target.select()}
                   min="0"
+                  step="any"
                 />
               </div>
 
@@ -343,6 +385,7 @@ export default function MaterialsStep({ basicInfo, workDayEntries, materials, on
                   onChange={(e) => updateMaterial(material.id, "sellingPrice", e.target.value)}
                   onFocus={(e) => e.target.select()}
                   min="0"
+                  step="any"
                 />
               </div>
 
