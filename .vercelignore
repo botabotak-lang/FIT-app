@@ -1,0 +1,6 @@
+# 検証用の一時ファイル・参考資料をデプロイに含めない。
+# Git 連携デプロイでは gitignore 済みで無関係だが、手動 `vercel deploy` の保険。
+/public/mock/
+/docs/reference/
+/.tmp-import-build/
+/docs/verify/

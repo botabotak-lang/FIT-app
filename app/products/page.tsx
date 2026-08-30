@@ -45,6 +45,7 @@ import {
   isFiltering,
   toSortKey,
   toStatusFilter,
+  toSupplierFilter,
   type ProductFilterState,
 } from "@/lib/productFilters";
 import { PRODUCTS_MOCK_ENABLED, loadMockProducts } from "@/lib/productsMock";
@@ -96,14 +97,30 @@ function ProductsPageInner() {
   const [visibleCount, setVisibleCount] = useState(PRODUCT_PAGE_SIZE);
 
   // 検索条件は URL に持たせる（編集ダイアログを閉じても・リロードしても残る）
-  const filter: ProductFilterState = useMemo(
+  const rawFilter: ProductFilterState = useMemo(
     () => ({
       query: searchParams.get("q") ?? "",
-      supplier: searchParams.get("supplier") ?? SUPPLIER_ALL,
+      supplier: (searchParams.get("supplier") ?? SUPPLIER_ALL).trim(),
       status: toStatusFilter(searchParams.get("status")),
       sort: toSortKey(searchParams.get("sort")),
     }),
     [searchParams]
+  );
+
+  const supplierCounts = useMemo(() => countBySupplier(products), [products]);
+  const registeredSuppliers = useMemo(
+    () => supplierCounts.map((s) => s.supplier),
+    [supplierCounts]
+  );
+  // 仕入先の丸めは読み込み後だけ（読み込み中は候補が空で、正しい値まで落ちてしまう）
+  const suppliersReady = !loading && !error;
+
+  const filter: ProductFilterState = useMemo(
+    () =>
+      suppliersReady
+        ? { ...rawFilter, supplier: toSupplierFilter(rawFilter.supplier, registeredSuppliers) }
+        : rawFilter,
+    [rawFilter, registeredSuppliers, suppliersReady]
   );
 
   const [queryInput, setQueryInput] = useState(filter.query);
@@ -157,7 +174,40 @@ function ProductsPageInner() {
     setVisibleCount(PRODUCT_PAGE_SIZE);
   }, [filter.query, filter.supplier, filter.status, filter.sort]);
 
+  // 未登録の仕入先が URL に残っていたら「すべて」に丸め、URL からも消す
+  useEffect(() => {
+    if (!suppliersReady) return;
+    if (rawFilter.supplier === filter.supplier) return;
+    updateParams({ supplier: filter.supplier });
+  }, [suppliersReady, rawFilter.supplier, filter.supplier, updateParams]);
+
+  /**
+   * 検証モック中は本番 Supabase に書き込ませない。
+   * モックは画面だけを差し替える仕組みで、書き込み経路は本番のままのため。
+   */
+  const blockedByMock = () => {
+    if (!PRODUCTS_MOCK_ENABLED) return false;
+    alert("検証モック中は保存できません");
+    return true;
+  };
+
+  const openAdd = () => {
+    if (blockedByMock()) return;
+    setDialog({ mode: "add" });
+  };
+
+  const openEdit = (target: Product) => {
+    if (blockedByMock()) return;
+    setDialog({ mode: "edit", product: target });
+  };
+
+  const openImport = () => {
+    if (blockedByMock()) return;
+    setShowImport(true);
+  };
+
   const handleSubmit = async (input: ProductInput) => {
+    if (blockedByMock()) return;
     if (dialog.mode === "edit") {
       await updateProduct(dialog.product.id, input);
     } else {
@@ -168,6 +218,7 @@ function ProductsPageInner() {
   };
 
   const handleToggle = async (product: Product) => {
+    if (blockedByMock()) return;
     const label = product.isActive ? "無効にします" : "有効にします";
     if (!confirm(`「${product.name}」を${label}か？`)) return;
     setTogglingId(product.id);
@@ -181,7 +232,6 @@ function ProductsPageInner() {
     }
   };
 
-  const supplierCounts = useMemo(() => countBySupplier(products), [products]);
   const visibleProducts = useMemo(
     () => arrangeProducts(products, filter),
     [products, filter]
@@ -213,11 +263,11 @@ function ProductsPageInner() {
             <ArrowLeft className="w-5 h-5" />
           </button>
           <h1 className="text-xl font-bold text-gray-900 flex-1 min-w-0">製品マスタ</h1>
-          <Button variant="outline" size="sm" onClick={() => setShowImport(true)}>
+          <Button variant="outline" size="sm" onClick={openImport}>
             <FileUp className="w-4 h-4 mr-1" />
             一括取込
           </Button>
-          <Button size="sm" onClick={() => setDialog({ mode: "add" })}>
+          <Button size="sm" onClick={openAdd}>
             <Plus className="w-4 h-4 mr-1" />
             追加
           </Button>
@@ -373,7 +423,7 @@ function ProductsPageInner() {
               <div className="text-center py-16 text-gray-400">
                 <Package className="w-12 h-12 mx-auto mb-3 opacity-30" />
                 <p className="mb-4">製品が登録されていません</p>
-                <Button onClick={() => setDialog({ mode: "add" })}>
+                <Button onClick={openAdd}>
                   <Plus className="w-4 h-4 mr-2" />
                   最初の製品を追加
                 </Button>
@@ -399,7 +449,7 @@ function ProductsPageInner() {
                       <ProductRow
                         product={p}
                         togglingId={togglingId}
-                        onEdit={(target) => setDialog({ mode: "edit", product: target })}
+                        onEdit={openEdit}
                         onToggle={handleToggle}
                       />
                     </div>

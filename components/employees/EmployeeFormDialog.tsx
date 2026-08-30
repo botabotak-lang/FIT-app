@@ -69,7 +69,7 @@ export default function EmployeeFormDialog({ employee, onSubmit, onCancel }: Pro
               value={form.name}
               onChange={(e) => set("name", e.target.value)}
               className="mt-1"
-              placeholder="例：大竹"
+              placeholder="例：山田"
             />
           </div>
           <div>

@@ -69,6 +69,20 @@ export function toSortKey(value: string | null): ProductSortKey {
     : "name";
 }
 
+/**
+ * URL の仕入先を登録済みの仕入先に丸める（status / sort と同じ扱い）。
+ * 登録されていない値は「すべて」に落とす。判定は製品の読み込み後に行うこと
+ * （読み込み前は候補が空で、正しい値まで落ちてしまうため）。
+ */
+export function toSupplierFilter(
+  value: string | null,
+  knownSuppliers: readonly string[]
+): string {
+  const supplier = (value ?? "").trim();
+  if (!supplier) return SUPPLIER_ALL;
+  return knownSuppliers.includes(supplier) ? supplier : SUPPLIER_ALL;
+}
+
 /** 何かしら絞り込んでいる状態か（バッジ・クリアボタンの表示判定） */
 export function isFiltering(state: ProductFilterState): boolean {
   return (

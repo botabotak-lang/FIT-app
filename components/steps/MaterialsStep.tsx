@@ -86,7 +86,7 @@ export default function MaterialsStep({ basicInfo, workDayEntries, materials, on
       sellingPrice: 0,
       sellingTotal: 0,
       shippingFee: 0,
-      carrier: "大竹",
+      carrier: "",
     };
     onMaterialsChange([...materials, newMaterial]);
   };
