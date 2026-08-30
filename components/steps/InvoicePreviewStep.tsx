@@ -266,7 +266,7 @@ export default function InvoicePreviewStep({
 
   const handleReportWorkbookExport = async () => {
     const payload = { basicInfo, workDayEntries, materials };
-    if (!confirmReportCapacity(payload, "all")) return;
+    if (!confirmReportCapacity(payload, "all", employees.map((e) => e.name))) return;
     await downloadReportWorkbook(payload, employees.map((e) => e.name), "all", rates);
   };
 

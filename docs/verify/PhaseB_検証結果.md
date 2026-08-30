@@ -71,6 +71,55 @@ BU2=令 和 ８年 BU5=サンプル電機 W11=・機器の取付位置を確認�
 | 年号が半角（`令 和 8年`） | 原本どおり全角（`令 和 ８年`） |
 | 未参照ファイル | `lib/workReportExcel.ts` / `lib/workReportImport.ts` を削除。`workReportLayout.ts` のExcel専用定数も削除 |
 
+## 検証FAIL対応（2026/08/30・2巡目）
+
+| # | 事象 | 対処 |
+|---|---|---|
+| 1 | テンプレートの `材料持出表!AJ17/AJ18/AJ19` が数式でなく固定値（952.7 / 136.3 / 154.5）。原本で数式が値に上書きされていたセルをそのまま引き継いでいた | `make_template.py` で材料持出表系の全明細行（1ページ目 行12〜24／2ページ目以降 行3〜25）の `AJ` を `=SUM(AF{r}*AB{r})`、`AS` を `=SUM(AO{r}*AB{r})` に**無条件で上書き**。あわせて明細領域（A〜BB）・作業報告書ブロック領域（B〜CC）に「数式でも空でもない残存値」が無いかスキャンし、検出したら列挙して失敗終了する |
+| 2 | 作業者集計枠が5枠固定で、6名以上だと6人目以降が集計されない | ラベル列を `CF` から10列間隔、値列をラベル列＋4列で**関数計算**（6枠目 `ED`/`EH`、7枠目 `EN`/`ER` …）。6枠目以降はテンプレートに書式が無いため、5枠目（`DT`/`DX`）のセル書式（font / alignment / border / fill / numFmt）を各行でコピーしてから書き込む。見出し（行9・68・136／2ページ目以降は行2・69・136）、各ブロックの4行、行138〜141の合計、`BZ138〜141` の全員合計、行137以降の作業者名リストを枠数に追随させた |
+| 3 | 2ページ目以降の集計見出し（`CF2` / `CF69`）に原本の氏名が残っていた | 見出し行がシートで異なる（1ページ目 9・68／2ページ目以降 2・69）ことに合わせて書き込み位置を修正 |
+| 4 | 材料持出表 行3〜9 の空き枠に `0` が印字される | 氏名が無い枠は `G` / `S` / `Y` / `AK` と工賃数式 `M` / `AE` / `AO` をすべて空欄（null）にする |
+| 5 | `BASE_WORKER_NAMES` に現行マスタに存在しない氏名がコードに残っていた | 削除。社員マスタが空のときは氏名なしの枠だけを出す |
+| 6 | `render_sample.mjs` の社員順が本番マスタ順と違う | `["豊島","鈴木","大竹","木内"]` に修正。`--employees=N`（または環境変数 `RENDER_EMPLOYEES`）で人数指定可 |
+| 7 | 未参照コンポーネントが残っていた | `components/MaterialsForm.tsx` / `components/WorkReportForm.tsx` / `components/steps/WorkerSelectionStep.tsx` を削除 |
+| 8 | （security-reviewer指摘）テンプレートの作業者別集計枠（`CF9`〜`DT9` / `CF68`〜 / `CF136`〜 / `Q137`〜`Q141` と `CJ`〜`DX` 列の集計数式）に**実在社員の氏名が焼き付いたまま**だった。テンプレートは `public/templates/` から認証なしで静的配信されるため、URLを知っていれば氏名が閲覧できた | `make_template.py` で氏名をプレースホルダ `作業者1`〜`作業者5` に置換（見出し・合計ラベル・数式・氏名リスト）。原本から氏名一覧を抽出し、生成後のブック全シートを走査して1件でも残っていれば失敗終了するチェックを追加。`verify_template.py` にも同じassertを追加。アプリ出力時は `writeWorkerFormulas` が全枠を社員マスタの氏名で上書きするため、出力ファイルにプレースホルダは残らない（検証済み） |
+
+### 未対応（窪田判断が必要）
+
+- **`scripts/sample_case.json` と `docs/verify/*.xlsx` の作業者名に実在社員の姓（豊島・鈴木・大竹・木内）を使用している。** 「本番マスタ順に合わせる」という指示に沿って現状のままにしてある。リポジトリ `botabotak-lang/FIT-app` がPublicの場合は完全架空の氏名（サンプル太郎 等）へ差し替えが必要
+- **テンプレート `public/templates/fit_report_template.xlsx` は認証なしの静的配信。** 氏名は除去済みだが、様式そのものは誰でもダウンロードできる。様式自体を秘匿する必要があるならAPI Route経由の配信に切り替える
+
+### 既知の制約
+
+- **作業者が8名以上になると、材料持出表の工賃集計は7名分（行3〜9）しか出力できない。** 8名以上を扱うにはテンプレートの拡張（行の追加と合計式の付け替え）が必要。現状は出力ボタン押下時に確認ダイアログで警告する。作業報告書側は枠を自動生成するため人数の上限なし
+
+### 検証コマンドと出力
+
+```text
+$ python3 scripts/make_template.py
+created public/templates/fit_report_template.xlsx
+残存値スキャン: 0 件（明細領域・作業報告書ブロック領域）
+氏名スキャン: 0 件（原本の氏名 5 名を全シート走査）
+
+$ python3 scripts/verify_template.py
+verify_template.py: OK
+  材料持出表系シートの明細行 AJ/AS: 全て数式
+  明細領域・作業報告書ブロック領域の残存値: 0 件
+  作業者別集計枠の原本氏名: 0 件（プレースホルダ「作業者N」に置換済み）
+
+$ node scripts/render_sample.mjs
+created docs/verify/sample_output.xlsx (all, 4名: 豊島・鈴木・大竹・木内)
+created docs/verify/sample_materials.xlsx (materials, 4名: 豊島・鈴木・大竹・木内)
+created docs/verify/sample_output_6workers.xlsx (all, 6名: 豊島・鈴木・大竹・木内・テスト5・テスト6)
+
+$ python3 scripts/verify_output.py
+verify_output.py: OK
+BU2=令 和 ８年 BU5=サンプル電機 W11=・機器の取付位置を確認し、取付可否を判断した。
+材料持出表(統合) A3=豊島 G3==SUM('作業報告書:作業報告書 (END)'!CJ139) G8=None G9=None
+材料持出表(単体) G3=1:00:00 S3=2:00:00 G5=6:00:00
+6名レンダー ED9=所要時間　テスト6 EH11==IF(Q11="テスト6",E14-E11,0)
+```
+
 ## ビルド
 
 `npm run build`

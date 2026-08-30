@@ -156,7 +156,7 @@ export default function MaterialsStep({ basicInfo, workDayEntries, materials, on
 
   const handleExportMaterialsExcel = async () => {
     const payload = { basicInfo, workDayEntries, materials };
-    if (!confirmReportCapacity(payload, "materials")) return;
+    if (!confirmReportCapacity(payload, "materials", activeWorkerNames)) return;
     await downloadReportWorkbook(payload, activeWorkerNames, "materials", rates);
   };
 

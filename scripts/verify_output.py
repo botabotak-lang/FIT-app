@@ -1,3 +1,4 @@
+import datetime
 from pathlib import Path
 
 import openpyxl
@@ -6,10 +7,23 @@ import openpyxl
 ROOT = Path(__file__).resolve().parents[1]
 OUTPUT = ROOT / "docs/verify/sample_output.xlsx"
 MATERIALS_ONLY = ROOT / "docs/verify/sample_materials.xlsx"
+SIX_WORKERS = ROOT / "docs/verify/sample_output_6workers.xlsx"
+
+# render_sample.mjs の既定は本番の社員マスタ順（豊島・鈴木・大竹・木内）
+MATERIAL_SHEETS = ["材料持出表", "材料持出表 (2)", "材料持出表 (3)", "材料持出表 (4)"]
 
 
 def is_formula(value):
     return isinstance(value, str) and value.startswith("=")
+
+
+def to_hours(value):
+    """h:mm 書式のセルは timedelta / time で返るので時間数に直す"""
+    if isinstance(value, datetime.timedelta):
+        return value.total_seconds() / 3600
+    if isinstance(value, datetime.time):
+        return value.hour + value.minute / 60 + value.second / 3600
+    return float(value)
 
 
 def check_all():
@@ -34,14 +48,30 @@ def check_all():
     # 作業内容は改行で1ブロック1行
     assert ws["W15"].value == "　既存架台の寸法が合わないため、加工が必要と判断した。"
     assert ws["W19"].value == "・必要な部材を確認し、手配を依頼した。"
-    assert ws["CJ12"].value == '=IF(Q11="大竹",H14-H11,0)'
+    # 作業者は社員マスタ順に枠へ入る（1枠目＝豊島）
+    assert ws["CF9"].value == "所要時間　豊島", ws["CF9"].value
+    assert ws["CJ12"].value == '=IF(Q11="豊島",H14-H11,0)', ws["CJ12"].value
+    assert ws["CZ9"].value == "所要時間　大竹", ws["CZ9"].value
+    # 5枠目は社員が居ないので空欄ラベル・0
+    assert ws["DT9"].value == "所要時間　", ws["DT9"].value
+    assert ws["DX11"].value == "=0", ws["DX11"].value
+    # 原本にハードコードされていた氏名が2ページ目以降の見出しに残っていないこと
+    for name in ("作業報告書 (2)", "作業報告書 (END)"):
+        page = wb[name]
+        assert page["CF2"].value == "所要時間　豊島", f"{name}!CF2={page['CF2'].value}"
+        assert page["CF69"].value == "所要時間　豊島", f"{name}!CF69={page['CF69'].value}"
 
     # 材料持出表（1ブック統合）：作業者集計は3D参照の数式のまま
     assert mat["D1"].value == "第一テスト丸"
     assert mat["S1"].value == "サンプル工事"
     assert mat["AH1"].value == "TEST-100"
-    assert mat["A3"].value == "大竹"
+    assert mat["A3"].value == "豊島"
+    assert mat["A6"].value == "木内"
     assert mat["G3"].value == "=SUM('作業報告書:作業報告書 (END)'!CJ139)", mat["G3"].value
+    # 社員は4名なので行7〜9は空欄（0を印字しない）
+    for row in (7, 8, 9):
+        for col in ("A", "G", "S", "Y", "AK", "M", "AE", "AO"):
+            assert mat[f"{col}{row}"].value is None, f"{col}{row}={mat[f'{col}{row}'].value!r}"
     assert mat["A12"].value is not None
     assert mat["E12"].value == "サンプルボルト"
     assert mat["U13"].value == "✓"
@@ -56,6 +86,16 @@ def check_all():
     assert mat["M3"].value == "=(G3*24)*7000", mat["M3"].value
     assert mat["AO3"].value == "=(AK3*24)*5600", mat["AO3"].value
 
+    # 明細行の合計列は全行が数式（原本では952.7等が焼き付いていた）
+    for row in range(12, 25):
+        assert mat[f"AJ{row}"].value == f"=SUM(AF{row}*AB{row})", f"材料持出表!AJ{row}={mat[f'AJ{row}'].value!r}"
+        assert mat[f"AS{row}"].value == f"=SUM(AO{row}*AB{row})", f"材料持出表!AS{row}={mat[f'AS{row}'].value!r}"
+    for name in MATERIAL_SHEETS[1:]:
+        page = wb[name]
+        for row in range(3, 26):
+            assert page[f"AJ{row}"].value == f"=SUM(AF{row}*AB{row})", f"{name}!AJ{row}={page[f'AJ{row}'].value!r}"
+            assert page[f"AS{row}"].value == f"=SUM(AO{row}*AB{row})", f"{name}!AS{row}={page[f'AS{row}'].value!r}"
+
     # 14件目以降は2ページ目へ
     assert wb["材料持出表 (2)"]["E3"].value == "サンプル絶縁テープ"
     return ws, mat
@@ -63,20 +103,28 @@ def check_all():
 
 def check_materials_only():
     wb = openpyxl.load_workbook(MATERIALS_ONLY, data_only=False)
-    assert wb.sheetnames == ["材料持出表", "材料持出表 (2)", "材料持出表 (3)", "材料持出表 (4)"], wb.sheetnames
+    assert wb.sheetnames == MATERIAL_SHEETS, wb.sheetnames
     ws = wb["材料持出表"]
 
     # 作業報告書シートが無いので、3D参照ではなく集計済みの時間値が入る
     for cell in ("G3", "S3", "Y3", "AK3"):
         assert not is_formula(ws[cell].value), f"{cell} は数式のままです: {ws[cell].value!r}"
-    # 大竹：平日時間(内) 6h ＝ 6/24 日
-    assert abs(ws["G3"].value.total_seconds() / 3600 - 6) < 1e-6, ws["G3"].value
-    assert abs(ws["S3"].value.total_seconds() / 3600 - 2) < 1e-6, ws["S3"].value
-    assert abs(ws["AK3"].value.total_seconds() / 3600 - 1) < 1e-6, ws["AK3"].value
-    # 豊島：1/30の1時間だけ
-    assert abs(ws["G4"].value.total_seconds() / 3600 - 1) < 1e-6, ws["G4"].value
-    # 鈴木：休日3時間
-    assert abs(ws["Y5"].value.total_seconds() / 3600 - 3) < 1e-6, ws["Y5"].value
+    # 行3＝豊島：1/30 の 時間内1h・時間外2h
+    assert ws["A3"].value == "豊島", ws["A3"].value
+    assert abs(to_hours(ws["G3"].value) - 1) < 1e-6, ws["G3"].value
+    assert abs(to_hours(ws["S3"].value) - 2) < 1e-6, ws["S3"].value
+    # 行4＝鈴木：休日3時間
+    assert ws["A4"].value == "鈴木", ws["A4"].value
+    assert abs(to_hours(ws["Y4"].value) - 3) < 1e-6, ws["Y4"].value
+    # 行5＝大竹：時間内6h・時間外2h・移動1h
+    assert ws["A5"].value == "大竹", ws["A5"].value
+    assert abs(to_hours(ws["G5"].value) - 6) < 1e-6, ws["G5"].value
+    assert abs(to_hours(ws["S5"].value) - 2) < 1e-6, ws["S5"].value
+    assert abs(to_hours(ws["AK5"].value) - 1) < 1e-6, ws["AK5"].value
+    # 空き枠（行7〜9）は 0 ではなく空欄
+    for row in (7, 8, 9):
+        for col in ("A", "G", "S", "Y", "AK", "M", "AE", "AO"):
+            assert ws[f"{col}{row}"].value is None, f"{col}{row}={ws[f'{col}{row}'].value!r}"
     # 工賃の数式は残る（値を掛けるだけなので #REF! にならない）
     assert is_formula(ws["M3"].value), ws["M3"].value
     # 船名・科目・型名は値で書かれている（作業報告書への参照ではない）
@@ -85,13 +133,42 @@ def check_materials_only():
     return ws
 
 
+def check_six_workers():
+    """5枠しかないテンプレートに6人目の集計枠（ED/EH）が生成されること"""
+    wb = openpyxl.load_workbook(SIX_WORKERS, data_only=False)
+    ws = wb["作業報告書"]
+    assert ws["ED9"].value == "所要時間　テスト6", ws["ED9"].value
+    assert ws["ED136"].value == "合計（テスト6）", ws["ED136"].value
+    assert ws["EH11"].value == '=IF(Q11="テスト6",E14-E11,0)', ws["EH11"].value
+    assert ws["EH12"].value == '=IF(Q11="テスト6",H14-H11,0)', ws["EH12"].value
+    assert ws["ED11"].value == "移動", ws["ED11"].value
+    # 合計行と全員合計に6枠目が含まれる
+    assert ws["EH138"].value.startswith("=EH11+EH15"), ws["EH138"].value
+    assert ws["BZ138"].value == "=CJ138+CT138+DD138+DN138+DX138+EH138", ws["BZ138"].value
+    # 作業者名リストは行137から6行
+    assert [ws[f"Q{r}"].value for r in range(137, 143)] == [
+        "豊島", "鈴木", "大竹", "木内", "テスト5", "テスト6",
+    ], [ws[f"Q{r}"].value for r in range(137, 143)]
+    # 2ページ目以降にも6枠目が生成される
+    page2 = wb["作業報告書 (2)"]
+    assert page2["ED2"].value == "所要時間　テスト6", page2["ED2"].value
+    assert page2["EH4"].value == '=IF(Q4="テスト6",E7-E4,0)', page2["EH4"].value
+    # 材料持出表は7行しかないので6名は全員入る（行9のみ空欄）
+    mat = wb["材料持出表"]
+    assert mat["A8"].value == "テスト6", mat["A8"].value
+    assert mat["A9"].value is None, mat["A9"].value
+    return ws
+
+
 def main():
     ws, mat = check_all()
     mat_only = check_materials_only()
+    six = check_six_workers()
     print("verify_output.py: OK")
     print(f"BU2={ws['BU2'].value} BU5={ws['BU5'].value} W11={ws['W11'].value}")
-    print(f"材料持出表(統合) G3={mat['G3'].value}")
-    print(f"材料持出表(単体) G3={mat_only['G3'].value} S3={mat_only['S3'].value} AK3={mat_only['AK3'].value}")
+    print(f"材料持出表(統合) A3={mat['A3'].value} G3={mat['G3'].value} G8={mat['G8'].value!r} G9={mat['G9'].value!r}")
+    print(f"材料持出表(単体) G3={mat_only['G3'].value} S3={mat_only['S3'].value} G5={mat_only['G5'].value}")
+    print(f"6名レンダー ED9={six['ED9'].value} EH11={six['EH11'].value}")
 
 
 if __name__ == "__main__":

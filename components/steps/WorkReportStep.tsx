@@ -146,7 +146,7 @@ export default function WorkReportStep({
   const handleExportWorkReportExcel = async () => {
     const sorted = sortWorkDayEntries(workDayEntries);
     const payload = { basicInfo, workDayEntries: sorted, materials: [] };
-    if (!confirmReportCapacity(payload, "workReport")) return;
+    if (!confirmReportCapacity(payload, "workReport", activeWorkerNames)) return;
     await downloadReportWorkbook(payload, activeWorkerNames, "workReport", rates);
   };
 

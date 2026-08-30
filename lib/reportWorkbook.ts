@@ -16,9 +16,59 @@ export type ReportWorkbookKind = "workReport" | "materials" | "all";
 const TEMPLATE_PATH = "/templates/fit_report_template.xlsx";
 const WORK_SHEETS = ["作業報告書", "作業報告書 (2)", "作業報告書 (3)", "作業報告書 (4)", "作業報告書 (5)", "作業報告書 (END)"];
 const MATERIAL_SHEETS = ["材料持出表", "材料持出表 (2)", "材料持出表 (3)", "材料持出表 (4)"];
-const BASE_WORKER_NAMES = ["大竹", "豊島", "鈴木", "内田", "新人"];
-const WORKER_LABEL_COLS = ["CF", "CP", "CZ", "DJ", "DT"];
-const WORKER_VALUE_COLS = ["CJ", "CT", "DD", "DN", "DX"];
+/**
+ * 作業者別集計枠（原本パターン）。
+ * ラベル列は CF→CP→CZ→DJ→DT と10列間隔、値列はラベル列＋4列。
+ * テンプレートに書式があるのは5枠目（DT〜EB）まで。6枠目以降（ED/EH, EN/ER …）は
+ * 同じ間隔で列を計算し、5枠目のセル書式をコピーして生成する。
+ */
+const WORKER_LABEL_BASE_COL = "CF";
+const WORKER_COL_STRIDE = 10;
+const WORKER_VALUE_COL_OFFSET = 4;
+/** テンプレートに書式が用意されている枠数 */
+const WORKER_TEMPLATE_SLOTS = 5;
+/** 材料持出表の作業者別集計行（行3〜9） */
+const MATERIAL_WORKER_ROWS = 7;
+
+function columnIndexOf(letter: string): number {
+  let index = 0;
+  for (const ch of letter) index = index * 26 + (ch.charCodeAt(0) - 64);
+  return index;
+}
+
+function columnLetterOf(index: number): string {
+  let letter = "";
+  let n = index;
+  while (n > 0) {
+    const rest = (n - 1) % 26;
+    letter = String.fromCharCode(65 + rest) + letter;
+    n = Math.floor((n - 1) / 26);
+  }
+  return letter;
+}
+
+const WORKER_LABEL_BASE_INDEX = columnIndexOf(WORKER_LABEL_BASE_COL);
+
+/** i番目（0始まり）の作業者枠のラベル列 */
+function workerLabelCol(slot: number): string {
+  return columnLetterOf(WORKER_LABEL_BASE_INDEX + slot * WORKER_COL_STRIDE);
+}
+
+/** i番目（0始まり）の作業者枠の値列 */
+function workerValueCol(slot: number): string {
+  return columnLetterOf(WORKER_LABEL_BASE_INDEX + slot * WORKER_COL_STRIDE + WORKER_VALUE_COL_OFFSET);
+}
+
+/** 5枠目のセル書式を6枠目以降にコピーする（テンプレートに書式が無いため） */
+function copyCellStyle(ws: ExcelJS.Worksheet, fromAddress: string, toAddress: string): void {
+  const src = ws.getCell(fromAddress);
+  const dst = ws.getCell(toAddress);
+  if (src.font) dst.font = src.font;
+  if (src.alignment) dst.alignment = src.alignment;
+  if (src.border) dst.border = src.border;
+  if (src.fill) dst.fill = src.fill;
+  if (src.numFmt) dst.numFmt = src.numFmt;
+}
 
 function excelFormula(formula: string): ExcelJS.CellValue {
   return { formula: formula.replace(/^=/, "") };
@@ -62,9 +112,9 @@ function hoursToExcelTime(hours: number): number {
   return hours / 24;
 }
 
+/** 社員マスタが空でも枠だけは出す（氏名は空欄） */
 function workerNames(employees: string[]): string[] {
-  const names = employees.filter(Boolean);
-  return names.length > 0 ? names : BASE_WORKER_NAMES.slice(0, 3);
+  return employees.filter(Boolean);
 }
 
 function workSheetStarts(firstPage: boolean): number[] {
@@ -86,20 +136,42 @@ function clearReportBlock(ws: ExcelJS.Worksheet, row: number): void {
   for (const col of ["E", "H", "K", "N"]) ws.getCell(`${col}${row + 3}`).value = null;
 }
 
+/** 作業者別集計の見出し行。ページ上部・ページ中央・合計欄でシートごとに位置が違う */
+function workerHeaderRows(firstPage: boolean): number[] {
+  return firstPage ? [9, 68, 136] : [2, 69, 136];
+}
+
+/** 6枠目以降は5枠目の書式を各行にコピーしてから書き込む */
+function prepareExtraSlot(ws: ExcelJS.Worksheet, slot: number, rows: number[]): void {
+  if (slot < WORKER_TEMPLATE_SLOTS) return;
+  const srcLabel = workerLabelCol(WORKER_TEMPLATE_SLOTS - 1);
+  const srcValue = workerValueCol(WORKER_TEMPLATE_SLOTS - 1);
+  const labelCol = workerLabelCol(slot);
+  const valueCol = workerValueCol(slot);
+  for (const row of rows) {
+    copyCellStyle(ws, `${srcLabel}${row}`, `${labelCol}${row}`);
+    copyCellStyle(ws, `${srcValue}${row}`, `${valueCol}${row}`);
+  }
+}
+
 function writeWorkerFormulas(wb: ExcelJS.Workbook, names: string[]): void {
-  const slots = Math.max(5, names.length);
+  const slots = Math.max(WORKER_TEMPLATE_SLOTS, names.length);
   for (const sheetName of WORK_SHEETS) {
     const ws = wb.getWorksheet(sheetName);
     if (!ws) continue;
-    const starts = workSheetStarts(sheetName === "作業報告書");
+    const firstPage = sheetName === "作業報告書";
+    const starts = workSheetStarts(firstPage);
+    const headerRows = workerHeaderRows(firstPage);
+    const blockRows = starts.flatMap((row) => [row, row + 1, row + 2, row + 3]);
+    const totalRows = [138, 139, 140, 141];
     for (let i = 0; i < slots; i += 1) {
-      const labelCol = WORKER_LABEL_COLS[i];
-      const valueCol = WORKER_VALUE_COLS[i];
-      if (!labelCol || !valueCol) continue;
+      const labelCol = workerLabelCol(i);
+      const valueCol = workerValueCol(i);
       const name = names[i] ?? "";
-      ws.getCell(`${labelCol}9`).value = `所要時間　${name}`;
-      ws.getCell(`${labelCol}68`).value = `所要時間　${name}`;
-      ws.getCell(`${labelCol}136`).value = `合計（${name}）`;
+      prepareExtraSlot(ws, i, [...headerRows, ...blockRows, ...totalRows]);
+      ws.getCell(`${labelCol}${headerRows[0]}`).value = `所要時間　${name}`;
+      ws.getCell(`${labelCol}${headerRows[1]}`).value = `所要時間　${name}`;
+      ws.getCell(`${labelCol}${headerRows[2]}`).value = `合計（${name}）`;
       for (const row of starts) {
         ws.getCell(`${labelCol}${row}`).value = "移動";
         ws.getCell(`${labelCol}${row + 1}`).value = "時間内";
@@ -115,9 +187,14 @@ function writeWorkerFormulas(wb: ExcelJS.Workbook, names: string[]): void {
         setFormula(ws.getCell(`${valueCol}${138 + offset}`), rows.join("+"));
       }
     }
-    for (let row = 137; row <= 141; row += 1) ws.getCell(`Q${row}`).value = names[row - 137] ?? "";
+    // 行137以降の作業者名リスト。枠を増やしたぶんだけ行も増やす
+    for (let i = 0; i < slots; i += 1) {
+      const row = 137 + i;
+      if (i >= WORKER_TEMPLATE_SLOTS) copyCellStyle(ws, "Q141", `Q${row}`);
+      ws.getCell(`Q${row}`).value = names[i] ?? "";
+    }
     for (let offset = 0; offset < 4; offset += 1) {
-      const refs = WORKER_VALUE_COLS.map((col) => `${col}${138 + offset}`);
+      const refs = Array.from({ length: slots }, (_, i) => `${workerValueCol(i)}${138 + offset}`);
       setFormula(ws.getCell(`BZ${138 + offset}`), refs.join("+"));
     }
   }
@@ -140,24 +217,28 @@ function writeMaterialWorkerFormulas(
   ws.getCell("M2").value = `工\u3000賃(@${rates.regular.toLocaleString("en-US")})`;
   ws.getCell("AE2").value = `工\u3000賃(@${rates.holiday.toLocaleString("en-US")})`;
   ws.getCell("AO2").value = `移動費(×${rates.travelFactor})`;
-  for (let i = 0; i < 7; i += 1) {
+  for (let i = 0; i < MATERIAL_WORKER_ROWS; i += 1) {
     const row = 3 + i;
-    const valueCol = WORKER_VALUE_COLS[i];
-    ws.getCell(`A${row}`).value = names[i] ?? "";
+    const name = names[i] ?? "";
+    ws.getCell(`A${row}`).value = name || null;
     ws.getCell(`AU${row}`).value = null;
+    if (!name) {
+      // 空き枠に 0 を印字しない
+      for (const col of ["G", "S", "Y", "AK", "M", "AE", "AO"]) ws.getCell(`${col}${row}`).value = null;
+      continue;
+    }
+    const valueCol = workerValueCol(i);
     if (hoursByWorker) {
-      const h = hoursByWorker.get(names[i] ?? "") ?? { travel: 0, regular: 0, overtime: 0, holiday: 0 };
+      const h = hoursByWorker.get(name) ?? { travel: 0, regular: 0, overtime: 0, holiday: 0 };
       ws.getCell(`G${row}`).value = hoursToExcelTime(h.regular);
       ws.getCell(`S${row}`).value = hoursToExcelTime(h.overtime);
       ws.getCell(`Y${row}`).value = hoursToExcelTime(h.holiday);
       ws.getCell(`AK${row}`).value = hoursToExcelTime(h.travel);
-    } else if (valueCol && names[i]) {
+    } else {
       setFormula(ws.getCell(`G${row}`), `SUM('作業報告書:作業報告書 (END)'!${valueCol}139)`);
       setFormula(ws.getCell(`S${row}`), `SUM('作業報告書:作業報告書 (END)'!${valueCol}140)`);
       setFormula(ws.getCell(`Y${row}`), `SUM('作業報告書:作業報告書 (END)'!${valueCol}141)`);
       setFormula(ws.getCell(`AK${row}`), `SUM('作業報告書:作業報告書 (END)'!${valueCol}138)`);
-    } else {
-      for (const col of ["G", "S", "Y", "AK"]) ws.getCell(`${col}${row}`).value = 0;
     }
     setFormula(ws.getCell(`M${row}`), `(G${row}*24)*${rates.regular}`);
     setFormula(ws.getCell(`AE${row}`), `(S${row}*24+Y${row}*24)*${rates.holiday}`);
@@ -296,9 +377,19 @@ function filename(kind: ReportWorkbookKind, basicInfo: BasicInfo): string {
 /** 用紙に収まらない件数のときだけ警告文を返す（収まるなら null） */
 export function reportCapacityWarning(
   shipCase: Pick<ShipCase, "workDayEntries" | "materials">,
-  kind: ReportWorkbookKind
+  kind: ReportWorkbookKind,
+  employees: string[] = []
 ): string | null {
   const messages: string[] = [];
+  if (kind !== "workReport") {
+    const workerCount = employees.filter(Boolean).length;
+    if (workerCount > MATERIAL_WORKER_ROWS) {
+      messages.push(
+        `作業者が${workerCount}名です。材料持出表の工賃集計は${MATERIAL_WORKER_ROWS}名分しか行がないため、` +
+          `${workerCount - MATERIAL_WORKER_ROWS}名分は出力されません（テンプレートの拡張が必要です）。`
+      );
+    }
+  }
   if (kind !== "materials") {
     const count = buildReportBlocks(shipCase.workDayEntries).length;
     if (count > REPORT_BLOCK_CAPACITY) {
@@ -322,9 +413,10 @@ export function reportCapacityWarning(
 /** 出力ボタンから呼ぶ。収まらない場合のみ確認ダイアログを出す */
 export function confirmReportCapacity(
   shipCase: Pick<ShipCase, "workDayEntries" | "materials">,
-  kind: ReportWorkbookKind
+  kind: ReportWorkbookKind,
+  employees: string[] = []
 ): boolean {
-  const warning = reportCapacityWarning(shipCase, kind);
+  const warning = reportCapacityWarning(shipCase, kind, employees);
   if (!warning) return true;
   return window.confirm(warning);
 }
