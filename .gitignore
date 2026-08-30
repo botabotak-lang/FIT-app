@@ -48,3 +48,6 @@ next-env.d.ts
 
 # 取込ドライランの一時ビルド
 /.tmp-import-build/
+
+# 製品マスタ画面の検証用モック（実データなのでコミットしない）
+/public/mock/

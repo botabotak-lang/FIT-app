@@ -10,14 +10,10 @@ import { Product, getActiveProducts } from "@/lib/productMaster";
 import { getActiveEmployees, Employee } from "@/lib/employeeMaster";
 import { confirmReportCapacity, downloadReportWorkbook } from "@/lib/reportWorkbook";
 import { DEFAULT_LABOR_RATES, getLaborRates, type LaborRates } from "@/lib/laborRates";
+import { matchesAllTerms, searchTerms } from "@/lib/searchText";
 
 /** 候補リストに一度に描画する最大件数（製品マスタが数百〜千件でも重くならないように） */
 const SUGGEST_LIMIT = 50;
-
-/** 検索用のキー。全角半角・大文字小文字・空白の差を無視して部分一致させる */
-function searchKey(value: string): string {
-  return value.normalize("NFKC").replace(/[\s　]/g, "").toLowerCase();
-}
 
 /** 小数の単価もそのまま見せる（例 25.7円・0.67円） */
 function formatPrice(value: number): string {
@@ -149,16 +145,15 @@ export default function MaterialsStep({ basicInfo, workDayEntries, materials, on
   };
 
   const getSuggestions = (materialId: string) => {
-    const query = searchKey(searchQuery[materialId] || "");
     // 品名・型式の部分一致で絞り込む（数百件でも入力すれば数件まで絞れる）
-    const allMasterMatches = query
-      ? masterProducts.filter(
-          (p) =>
-            searchKey(p.name).includes(query) || searchKey(p.modelType).includes(query)
-        )
-      : masterProducts;
+    // 正規化・一致判定は製品マスタ画面の検索窓と同じロジック（lib/searchText）を使う
+    const terms = searchTerms(searchQuery[materialId] || "");
+    const allMasterMatches =
+      terms.length === 0
+        ? masterProducts
+        : masterProducts.filter((p) => matchesAllTerms([p.name, p.modelType], terms));
     const allHistoryMatches = productHistory
-      .filter((h) => !query || searchKey(h).includes(query))
+      .filter((h) => matchesAllTerms([h], terms))
       .filter((h) => !allMasterMatches.some((p) => p.name === h));
     return {
       masterMatches: allMasterMatches.slice(0, SUGGEST_LIMIT),
