@@ -29,9 +29,9 @@ const require = createRequire(import.meta.url);
 const { createReportWorkbookBuffer } = require(join(buildDir, "reportWorkbook.js"));
 const sample = JSON.parse(await readFile(join(root, "scripts/sample_case.json"), "utf8"));
 const template = await readFile(join(root, "public/templates/fit_report_template.xlsx"));
-// 本番の社員マスタ（sort_order順）。5枠目以降の検証用にテスト社員を足せるようにしてある
-const MASTER_EMPLOYEES = ["豊島", "鈴木", "大竹", "木内"];
-const EXTRA_EMPLOYEES = ["テスト5", "テスト6", "テスト7"];
+// サンプル用の架空作業者（本番の社員マスタと同じ人数・並び順）。5枠目以降の検証用に追加分も用意
+const MASTER_EMPLOYEES = ["作業者A", "作業者B", "作業者C", "作業者D"];
+const EXTRA_EMPLOYEES = ["作業者E", "作業者F", "作業者G"];
 const ALL_EMPLOYEES = [...MASTER_EMPLOYEES, ...EXTRA_EMPLOYEES];
 
 /** 人数指定：`--employees=6` または環境変数 RENDER_EMPLOYEES=6 */

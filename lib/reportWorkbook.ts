@@ -282,12 +282,19 @@ function writeWorkReport(wb: ExcelJS.Workbook, basicInfo: BasicInfo, entries: Wo
   }
 }
 
-function materialRowSlots(): Array<{ sheet: string; rows: number[]; carrierCell: string }> {
+/**
+ * 材料持出表の明細行と合計行。
+ * 合計行はラベル（1ページ目 AF25/AO25・2ページ目以降 AF26/AO26）の右の結合セルで、
+ * 仕入合計＝AJ列（結合 AJ{row}:AN{row}）・売値合計＝AS列（結合 AS{row}:AW{row}）。
+ */
+function materialRowSlots(): Array<{ sheet: string; rows: number[]; carrierCell: string; totalRow: number }> {
+  const firstRows = Array.from({ length: 13 }, (_, i) => 12 + i);
+  const restRows = Array.from({ length: 23 }, (_, i) => 3 + i);
   return [
-    { sheet: "材料持出表", rows: Array.from({ length: 13 }, (_, i) => 12 + i), carrierCell: "Z25" },
-    { sheet: "材料持出表 (2)", rows: Array.from({ length: 23 }, (_, i) => 3 + i), carrierCell: "Z26" },
-    { sheet: "材料持出表 (3)", rows: Array.from({ length: 23 }, (_, i) => 3 + i), carrierCell: "Z26" },
-    { sheet: "材料持出表 (4)", rows: Array.from({ length: 23 }, (_, i) => 3 + i), carrierCell: "Z26" },
+    { sheet: "材料持出表", rows: firstRows, carrierCell: "Z25", totalRow: 25 },
+    { sheet: "材料持出表 (2)", rows: restRows, carrierCell: "Z26", totalRow: 26 },
+    { sheet: "材料持出表 (3)", rows: restRows, carrierCell: "Z26", totalRow: 26 },
+    { sheet: "材料持出表 (4)", rows: restRows, carrierCell: "Z26", totalRow: 26 },
   ];
 }
 
@@ -297,7 +304,8 @@ function writeMaterials(wb: ExcelJS.Workbook, basicInfo: BasicInfo, entries: Wor
     first.getCell("D1").value = basicInfo.shipName || "";
     first.getCell("S1").value = basicInfo.category || "";
     first.getCell("AH1").value = basicInfo.modelName || "";
-    first.getCell("AX1").value = dateValue(basicInfo.receptionDate) ?? null;
+    // 完成月日は完成日フィールド。未入力なら空欄（受付日で代用しない）
+    first.getCell("AX1").value = dateValue(basicInfo.completionDate) ?? null;
   }
   const rows = buildMaterialRows(materials);
   let index = 0;
@@ -321,6 +329,11 @@ function writeMaterials(wb: ExcelJS.Workbook, basicInfo: BasicInfo, entries: Wor
       ws.getCell(`AO${row}`).value = item.sellingPrice;
       ws.getCell(`AX${row}`).value = item.shippingFee;
     }
+    // 仕入合計・売値合計（明細が無いページは 0 になる）
+    const firstRow = slot.rows[0];
+    const lastRow = slot.rows[slot.rows.length - 1];
+    setFormula(ws.getCell(`AJ${slot.totalRow}`), `SUM(AJ${firstRow}:AJ${lastRow})`);
+    setFormula(ws.getCell(`AS${slot.totalRow}`), `SUM(AS${firstRow}:AS${lastRow})`);
   }
 }
 

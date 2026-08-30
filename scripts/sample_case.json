@@ -9,7 +9,8 @@
     "category": "サンプル工事",
     "modelName": "TEST-100",
     "manufacturer": "サンプル電機",
-    "receptionDate": "2026-01-22"
+    "receptionDate": "2026-01-22",
+    "completionDate": "2026-02-06"
   },
   "selectedWorkers": [],
   "workDayEntries": [
@@ -17,7 +18,7 @@
       "id": "w1",
       "date": "2026-01-22",
       "workers": [
-        "大竹"
+        "作業者C"
       ],
       "location": "サンプル港",
       "workContent": "・機器の取付位置を確認し、取付可否を判断した。\n　既存架台の寸法が合わないため、加工が必要と判断した。\n・必要な部材を確認し、手配を依頼した。",
@@ -52,8 +53,8 @@
       "id": "w2",
       "date": "2026-01-30",
       "workers": [
-        "大竹",
-        "豊島"
+        "作業者C",
+        "作業者A"
       ],
       "location": "サンプル造船所",
       "workContent": "・ケーブルを船内に引き込むためグランドを取り付けた。\n・配線を仮固定し、導通を確認した。",
@@ -76,7 +77,7 @@
       "id": "w3",
       "date": "2026-02-05",
       "workers": [
-        "鈴木"
+        "作業者B"
       ],
       "location": "サンプル港",
       "workContent": "・動作確認を行い、正常に受信することを確認した。",
@@ -104,7 +105,7 @@
       "sellingPrice": 120,
       "sellingTotal": 720,
       "shippingFee": 0,
-      "carrier": "大竹",
+      "carrier": "作業者C",
       "unit": "本"
     },
     {
@@ -120,7 +121,7 @@
       "sellingPrice": 0,
       "sellingTotal": 0,
       "shippingFee": 0,
-      "carrier": "大竹",
+      "carrier": "作業者C",
       "unit": "個"
     },
     {
@@ -136,7 +137,7 @@
       "sellingPrice": 240,
       "sellingTotal": 4800,
       "shippingFee": 800,
-      "carrier": "大竹",
+      "carrier": "作業者C",
       "unit": "m"
     },
     {
@@ -152,7 +153,7 @@
       "sellingPrice": 50,
       "sellingTotal": 500,
       "shippingFee": 0,
-      "carrier": "大竹",
+      "carrier": "作業者C",
       "unit": "個"
     },
     {
@@ -168,7 +169,7 @@
       "sellingPrice": 3800,
       "sellingTotal": 7600,
       "shippingFee": 0,
-      "carrier": "大竹",
+      "carrier": "作業者C",
       "unit": "台"
     },
     {
@@ -184,7 +185,7 @@
       "sellingPrice": 6300,
       "sellingTotal": 6300,
       "shippingFee": 500,
-      "carrier": "大竹",
+      "carrier": "作業者C",
       "unit": "本"
     },
     {
@@ -200,7 +201,7 @@
       "sellingPrice": 280,
       "sellingTotal": 840,
       "shippingFee": 0,
-      "carrier": "大竹",
+      "carrier": "作業者C",
       "unit": "巻"
     },
     {
@@ -216,7 +217,7 @@
       "sellingPrice": 150,
       "sellingTotal": 750,
       "shippingFee": 0,
-      "carrier": "大竹",
+      "carrier": "作業者C",
       "unit": "個"
     },
     {
@@ -232,7 +233,7 @@
       "sellingPrice": 950,
       "sellingTotal": 3800,
       "shippingFee": 0,
-      "carrier": "大竹",
+      "carrier": "作業者C",
       "unit": "個"
     },
     {
@@ -248,7 +249,7 @@
       "sellingPrice": 1200,
       "sellingTotal": 1200,
       "shippingFee": 0,
-      "carrier": "大竹",
+      "carrier": "作業者C",
       "unit": "本"
     },
     {
@@ -264,7 +265,7 @@
       "sellingPrice": 30,
       "sellingTotal": 600,
       "shippingFee": 0,
-      "carrier": "大竹",
+      "carrier": "作業者C",
       "unit": "個"
     },
     {
@@ -280,7 +281,7 @@
       "sellingPrice": 20,
       "sellingTotal": 400,
       "shippingFee": 0,
-      "carrier": "大竹",
+      "carrier": "作業者C",
       "unit": "個"
     },
     {
@@ -296,7 +297,7 @@
       "sellingPrice": 12,
       "sellingTotal": 600,
       "shippingFee": 0,
-      "carrier": "鈴木",
+      "carrier": "作業者B",
       "unit": "袋"
     },
     {
@@ -312,7 +313,7 @@
       "sellingPrice": 320,
       "sellingTotal": 640,
       "shippingFee": 0,
-      "carrier": "鈴木",
+      "carrier": "作業者B",
       "unit": "巻"
     },
     {
@@ -328,7 +329,7 @@
       "sellingPrice": 700,
       "sellingTotal": 2100,
       "shippingFee": 600,
-      "carrier": "鈴木",
+      "carrier": "作業者B",
       "unit": "個"
     }
   ]

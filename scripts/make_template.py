@@ -32,7 +32,7 @@ MATERIAL_SHEETS = [
     "材料持出表 (4)",
 ]
 
-# 明細行の合計列。原本では大竹氏が数式を値で上書きしたセルがあるため、必ず数式に戻す
+# 明細行の合計列。原本では担当者が数式を値で上書きしたセルがあるため、必ず数式に戻す
 MATERIAL_SUM_FORMULAS = {
     "AJ": "=SUM(AF{row}*AB{row})",  # 仕入合計 ＝ 仕入単価 × 数量
     "AS": "=SUM(AO{row}*AB{row})",  # 売値合計 ＝ 売値単価 × 数量
@@ -146,7 +146,7 @@ def neutralize_worker_names(ws, first_page):
             for offset in range(4):
                 cell = ws[f"{value_col}{start + offset}"]
                 if is_formula(cell.value):
-                    # =IF(Q11="大竹",E14-E11,0) の氏名部分だけを差し替える
+                    # =IF(Q11="氏名",E14-E11,0) の氏名部分だけを差し替える
                     cell.value = re.sub(r'="[^"]*"', f'="{placeholder}"', cell.value, count=1)
     for slot, row in enumerate(WORKER_NAME_LIST_ROWS):
         ws[f"{WORKER_NAME_LIST_COL}{row}"] = worker_placeholder(slot)

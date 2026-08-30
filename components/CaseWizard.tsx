@@ -40,6 +40,7 @@ export default function CaseWizard({ initialCase }: Props) {
       modelName: "",
       manufacturer: "",
       receptionDate: "",
+      completionDate: "",
     }
   );
   const [workDayEntries, setWorkDayEntries] = useState<WorkDayEntry[]>(

@@ -8,6 +8,8 @@ export type BasicInfo = {
   modelName: string;
   manufacturer: string;
   receptionDate: string;
+  /** 完成日（"YYYY-MM-DD" または ""）。材料持出表 AX1「完成月日」に出力する。旧データは "" */
+  completionDate: string;
 };
 
 export type TimeRange = {

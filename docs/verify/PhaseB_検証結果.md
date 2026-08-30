@@ -80,13 +80,12 @@ BU2=令 和 ８年 BU5=サンプル電機 W11=・機器の取付位置を確認�
 | 3 | 2ページ目以降の集計見出し（`CF2` / `CF69`）に原本の氏名が残っていた | 見出し行がシートで異なる（1ページ目 9・68／2ページ目以降 2・69）ことに合わせて書き込み位置を修正 |
 | 4 | 材料持出表 行3〜9 の空き枠に `0` が印字される | 氏名が無い枠は `G` / `S` / `Y` / `AK` と工賃数式 `M` / `AE` / `AO` をすべて空欄（null）にする |
 | 5 | `BASE_WORKER_NAMES` に現行マスタに存在しない氏名がコードに残っていた | 削除。社員マスタが空のときは氏名なしの枠だけを出す |
-| 6 | `render_sample.mjs` の社員順が本番マスタ順と違う | `["豊島","鈴木","大竹","木内"]` に修正。`--employees=N`（または環境変数 `RENDER_EMPLOYEES`）で人数指定可 |
+| 6 | `render_sample.mjs` の社員順が本番マスタ順と違う | 本番マスタ4名と同じ人数・並び順に修正（氏名は架空の `作業者A`〜`作業者D`）。`--employees=N`（または環境変数 `RENDER_EMPLOYEES`）で人数指定可 |
 | 7 | 未参照コンポーネントが残っていた | `components/MaterialsForm.tsx` / `components/WorkReportForm.tsx` / `components/steps/WorkerSelectionStep.tsx` を削除 |
 | 8 | （security-reviewer指摘）テンプレートの作業者別集計枠（`CF9`〜`DT9` / `CF68`〜 / `CF136`〜 / `Q137`〜`Q141` と `CJ`〜`DX` 列の集計数式）に**実在社員の氏名が焼き付いたまま**だった。テンプレートは `public/templates/` から認証なしで静的配信されるため、URLを知っていれば氏名が閲覧できた | `make_template.py` で氏名をプレースホルダ `作業者1`〜`作業者5` に置換（見出し・合計ラベル・数式・氏名リスト）。原本から氏名一覧を抽出し、生成後のブック全シートを走査して1件でも残っていれば失敗終了するチェックを追加。`verify_template.py` にも同じassertを追加。アプリ出力時は `writeWorkerFormulas` が全枠を社員マスタの氏名で上書きするため、出力ファイルにプレースホルダは残らない（検証済み） |
 
 ### 未対応（窪田判断が必要）
 
-- **`scripts/sample_case.json` と `docs/verify/*.xlsx` の作業者名に実在社員の姓（豊島・鈴木・大竹・木内）を使用している。** 「本番マスタ順に合わせる」という指示に沿って現状のままにしてある。リポジトリ `botabotak-lang/FIT-app` がPublicの場合は完全架空の氏名（サンプル太郎 等）へ差し替えが必要
 - **テンプレート `public/templates/fit_report_template.xlsx` は認証なしの静的配信。** 氏名は除去済みだが、様式そのものは誰でもダウンロードできる。様式自体を秘匿する必要があるならAPI Route経由の配信に切り替える
 
 ### 既知の制約
@@ -108,16 +107,17 @@ verify_template.py: OK
   作業者別集計枠の原本氏名: 0 件（プレースホルダ「作業者N」に置換済み）
 
 $ node scripts/render_sample.mjs
-created docs/verify/sample_output.xlsx (all, 4名: 豊島・鈴木・大竹・木内)
-created docs/verify/sample_materials.xlsx (materials, 4名: 豊島・鈴木・大竹・木内)
-created docs/verify/sample_output_6workers.xlsx (all, 6名: 豊島・鈴木・大竹・木内・テスト5・テスト6)
+created docs/verify/sample_output.xlsx (all, 4名: 作業者A・作業者B・作業者C・作業者D)
+created docs/verify/sample_materials.xlsx (materials, 4名: 作業者A・作業者B・作業者C・作業者D)
+created docs/verify/sample_output_6workers.xlsx (all, 6名: 作業者A・作業者B・作業者C・作業者D・作業者E・作業者F)
 
 $ python3 scripts/verify_output.py
 verify_output.py: OK
 BU2=令 和 ８年 BU5=サンプル電機 W11=・機器の取付位置を確認し、取付可否を判断した。
-材料持出表(統合) A3=豊島 G3==SUM('作業報告書:作業報告書 (END)'!CJ139) G8=None G9=None
+材料持出表(統合) A3=作業者A G3==SUM('作業報告書:作業報告書 (END)'!CJ139) G8=None G9=None
 材料持出表(単体) G3=1:00:00 S3=2:00:00 G5=6:00:00
-6名レンダー ED9=所要時間　テスト6 EH11==IF(Q11="テスト6",E14-E11,0)
+完成月日 AX1=2026-02-06 00:00:00 合計 AJ25==SUM(AJ12:AJ24) AS25==SUM(AS12:AS24)
+6名レンダー ED9=所要時間　作業者F EH11==IF(Q11="作業者F",E14-E11,0)
 ```
 
 ## ビルド

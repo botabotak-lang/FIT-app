@@ -9,12 +9,39 @@ OUTPUT = ROOT / "docs/verify/sample_output.xlsx"
 MATERIALS_ONLY = ROOT / "docs/verify/sample_materials.xlsx"
 SIX_WORKERS = ROOT / "docs/verify/sample_output_6workers.xlsx"
 
-# render_sample.mjs の既定は本番の社員マスタ順（豊島・鈴木・大竹・木内）
+# render_sample.mjs の既定は架空の作業者4名（作業者A〜作業者D。本番マスタと同じ人数・並び順）
 MATERIAL_SHEETS = ["材料持出表", "材料持出表 (2)", "材料持出表 (3)", "材料持出表 (4)"]
+
+# sample_case.json の completionDate（材料持出表 AX1「完成月日」）
+EXCEL_EPOCH = datetime.date(1899, 12, 30)
+COMPLETION_DATE = datetime.date(2026, 2, 6)
+COMPLETION_SERIAL = (COMPLETION_DATE - EXCEL_EPOCH).days
+
+# 合計セル（ラベル AF/AO の右の結合セル）。1ページ目は行25・2ページ目以降は行26
+FIRST_TOTAL = ("AJ25", "=SUM(AJ12:AJ24)", "AS25", "=SUM(AS12:AS24)")
+REST_TOTAL = ("AJ26", "=SUM(AJ3:AJ25)", "AS26", "=SUM(AS3:AS25)")
 
 
 def is_formula(value):
     return isinstance(value, str) and value.startswith("=")
+
+
+def to_date_serial(value):
+    """yyyy/m/d 書式のセルは datetime で返るので Excel の日付シリアルに直す"""
+    if isinstance(value, datetime.datetime):
+        return (value.date() - EXCEL_EPOCH).days
+    if isinstance(value, datetime.date):
+        return (value - EXCEL_EPOCH).days
+    return int(value)
+
+
+def check_material_totals(wb):
+    """材料持出表の仕入合計・売値合計が SUM 数式であること"""
+    for i, name in enumerate(MATERIAL_SHEETS):
+        ws = wb[name]
+        pur_cell, pur_formula, sell_cell, sell_formula = FIRST_TOTAL if i == 0 else REST_TOTAL
+        assert ws[pur_cell].value == pur_formula, f"{name}!{pur_cell}={ws[pur_cell].value!r}"
+        assert ws[sell_cell].value == sell_formula, f"{name}!{sell_cell}={ws[sell_cell].value!r}"
 
 
 def to_hours(value):
@@ -43,30 +70,32 @@ def check_all():
     assert ws["B11"].value is not None
     assert ws["E11"].value is not None
     assert ws["E14"].value is not None
-    assert ws["Q11"].value == "大竹"
+    assert ws["Q11"].value == "作業者C"
     assert ws["W11"].value == "・機器の取付位置を確認し、取付可否を判断した。"
     # 作業内容は改行で1ブロック1行
     assert ws["W15"].value == "　既存架台の寸法が合わないため、加工が必要と判断した。"
     assert ws["W19"].value == "・必要な部材を確認し、手配を依頼した。"
-    # 作業者は社員マスタ順に枠へ入る（1枠目＝豊島）
-    assert ws["CF9"].value == "所要時間　豊島", ws["CF9"].value
-    assert ws["CJ12"].value == '=IF(Q11="豊島",H14-H11,0)', ws["CJ12"].value
-    assert ws["CZ9"].value == "所要時間　大竹", ws["CZ9"].value
+    # 作業者は社員マスタ順に枠へ入る（1枠目＝作業者A）
+    assert ws["CF9"].value == "所要時間　作業者A", ws["CF9"].value
+    assert ws["CJ12"].value == '=IF(Q11="作業者A",H14-H11,0)', ws["CJ12"].value
+    assert ws["CZ9"].value == "所要時間　作業者C", ws["CZ9"].value
     # 5枠目は社員が居ないので空欄ラベル・0
     assert ws["DT9"].value == "所要時間　", ws["DT9"].value
     assert ws["DX11"].value == "=0", ws["DX11"].value
     # 原本にハードコードされていた氏名が2ページ目以降の見出しに残っていないこと
     for name in ("作業報告書 (2)", "作業報告書 (END)"):
         page = wb[name]
-        assert page["CF2"].value == "所要時間　豊島", f"{name}!CF2={page['CF2'].value}"
-        assert page["CF69"].value == "所要時間　豊島", f"{name}!CF69={page['CF69'].value}"
+        assert page["CF2"].value == "所要時間　作業者A", f"{name}!CF2={page['CF2'].value}"
+        assert page["CF69"].value == "所要時間　作業者A", f"{name}!CF69={page['CF69'].value}"
 
     # 材料持出表（1ブック統合）：作業者集計は3D参照の数式のまま
     assert mat["D1"].value == "第一テスト丸"
     assert mat["S1"].value == "サンプル工事"
     assert mat["AH1"].value == "TEST-100"
-    assert mat["A3"].value == "豊島"
-    assert mat["A6"].value == "木内"
+    # 完成月日（AX1）は completionDate。受付日（2026-01-22）ではない
+    assert to_date_serial(mat["AX1"].value) == COMPLETION_SERIAL, mat["AX1"].value
+    assert mat["A3"].value == "作業者A"
+    assert mat["A6"].value == "作業者D"
     assert mat["G3"].value == "=SUM('作業報告書:作業報告書 (END)'!CJ139)", mat["G3"].value
     # 社員は4名なので行7〜9は空欄（0を印字しない）
     for row in (7, 8, 9):
@@ -96,6 +125,9 @@ def check_all():
             assert page[f"AJ{row}"].value == f"=SUM(AF{row}*AB{row})", f"{name}!AJ{row}={page[f'AJ{row}'].value!r}"
             assert page[f"AS{row}"].value == f"=SUM(AO{row}*AB{row})", f"{name}!AS{row}={page[f'AS{row}'].value!r}"
 
+    # 仕入合計・売値合計の SUM 数式
+    check_material_totals(wb)
+
     # 14件目以降は2ページ目へ
     assert wb["材料持出表 (2)"]["E3"].value == "サンプル絶縁テープ"
     return ws, mat
@@ -109,15 +141,15 @@ def check_materials_only():
     # 作業報告書シートが無いので、3D参照ではなく集計済みの時間値が入る
     for cell in ("G3", "S3", "Y3", "AK3"):
         assert not is_formula(ws[cell].value), f"{cell} は数式のままです: {ws[cell].value!r}"
-    # 行3＝豊島：1/30 の 時間内1h・時間外2h
-    assert ws["A3"].value == "豊島", ws["A3"].value
+    # 行3＝作業者A：1/30 の 時間内1h・時間外2h
+    assert ws["A3"].value == "作業者A", ws["A3"].value
     assert abs(to_hours(ws["G3"].value) - 1) < 1e-6, ws["G3"].value
     assert abs(to_hours(ws["S3"].value) - 2) < 1e-6, ws["S3"].value
-    # 行4＝鈴木：休日3時間
-    assert ws["A4"].value == "鈴木", ws["A4"].value
+    # 行4＝作業者B：休日3時間
+    assert ws["A4"].value == "作業者B", ws["A4"].value
     assert abs(to_hours(ws["Y4"].value) - 3) < 1e-6, ws["Y4"].value
-    # 行5＝大竹：時間内6h・時間外2h・移動1h
-    assert ws["A5"].value == "大竹", ws["A5"].value
+    # 行5＝作業者C：時間内6h・時間外2h・移動1h
+    assert ws["A5"].value == "作業者C", ws["A5"].value
     assert abs(to_hours(ws["G5"].value) - 6) < 1e-6, ws["G5"].value
     assert abs(to_hours(ws["S5"].value) - 2) < 1e-6, ws["S5"].value
     assert abs(to_hours(ws["AK5"].value) - 1) < 1e-6, ws["AK5"].value
@@ -130,6 +162,9 @@ def check_materials_only():
     # 船名・科目・型名は値で書かれている（作業報告書への参照ではない）
     assert ws["D1"].value == "第一テスト丸"
     assert ws["S1"].value == "サンプル工事"
+    assert to_date_serial(ws["AX1"].value) == COMPLETION_SERIAL, ws["AX1"].value
+    # 材料持出表のみの出力でも合計は SUM 数式
+    check_material_totals(wb)
     return ws
 
 
@@ -137,25 +172,25 @@ def check_six_workers():
     """5枠しかないテンプレートに6人目の集計枠（ED/EH）が生成されること"""
     wb = openpyxl.load_workbook(SIX_WORKERS, data_only=False)
     ws = wb["作業報告書"]
-    assert ws["ED9"].value == "所要時間　テスト6", ws["ED9"].value
-    assert ws["ED136"].value == "合計（テスト6）", ws["ED136"].value
-    assert ws["EH11"].value == '=IF(Q11="テスト6",E14-E11,0)', ws["EH11"].value
-    assert ws["EH12"].value == '=IF(Q11="テスト6",H14-H11,0)', ws["EH12"].value
+    assert ws["ED9"].value == "所要時間　作業者F", ws["ED9"].value
+    assert ws["ED136"].value == "合計（作業者F）", ws["ED136"].value
+    assert ws["EH11"].value == '=IF(Q11="作業者F",E14-E11,0)', ws["EH11"].value
+    assert ws["EH12"].value == '=IF(Q11="作業者F",H14-H11,0)', ws["EH12"].value
     assert ws["ED11"].value == "移動", ws["ED11"].value
     # 合計行と全員合計に6枠目が含まれる
     assert ws["EH138"].value.startswith("=EH11+EH15"), ws["EH138"].value
     assert ws["BZ138"].value == "=CJ138+CT138+DD138+DN138+DX138+EH138", ws["BZ138"].value
     # 作業者名リストは行137から6行
     assert [ws[f"Q{r}"].value for r in range(137, 143)] == [
-        "豊島", "鈴木", "大竹", "木内", "テスト5", "テスト6",
+        "作業者A", "作業者B", "作業者C", "作業者D", "作業者E", "作業者F",
     ], [ws[f"Q{r}"].value for r in range(137, 143)]
     # 2ページ目以降にも6枠目が生成される
     page2 = wb["作業報告書 (2)"]
-    assert page2["ED2"].value == "所要時間　テスト6", page2["ED2"].value
-    assert page2["EH4"].value == '=IF(Q4="テスト6",E7-E4,0)', page2["EH4"].value
+    assert page2["ED2"].value == "所要時間　作業者F", page2["ED2"].value
+    assert page2["EH4"].value == '=IF(Q4="作業者F",E7-E4,0)', page2["EH4"].value
     # 材料持出表は7行しかないので6名は全員入る（行9のみ空欄）
     mat = wb["材料持出表"]
-    assert mat["A8"].value == "テスト6", mat["A8"].value
+    assert mat["A8"].value == "作業者F", mat["A8"].value
     assert mat["A9"].value is None, mat["A9"].value
     return ws
 
@@ -168,6 +203,7 @@ def main():
     print(f"BU2={ws['BU2'].value} BU5={ws['BU5'].value} W11={ws['W11'].value}")
     print(f"材料持出表(統合) A3={mat['A3'].value} G3={mat['G3'].value} G8={mat['G8'].value!r} G9={mat['G9'].value!r}")
     print(f"材料持出表(単体) G3={mat_only['G3'].value} S3={mat_only['S3'].value} G5={mat_only['G5'].value}")
+    print(f"完成月日 AX1={mat['AX1'].value} 合計 AJ25={mat['AJ25'].value} AS25={mat['AS25'].value}")
     print(f"6名レンダー ED9={six['ED9'].value} EH11={six['EH11'].value}")
 
 

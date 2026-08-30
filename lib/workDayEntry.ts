@@ -1,4 +1,4 @@
-import type { Material, ShipCase, TimeBlock, TimeBlockKind, WorkDayEntry, TimeRange, Worker } from "./types";
+import type { BasicInfo, Material, ShipCase, TimeBlock, TimeBlockKind, WorkDayEntry, TimeRange, Worker } from "./types";
 import { DEFAULT_LABOR_RATES, type LaborRates } from "./laborRates";
 
 export function newTimeBlockId(): string {
@@ -104,9 +104,16 @@ export function normalizeMaterial(material: Material | Record<string, unknown>):
   return { ...m, unit: typeof m.unit === "string" ? m.unit : "" };
 }
 
+/** 旧データには completionDate が無い（完成日フィールド追加時に導入） */
+export function normalizeBasicInfo(basicInfo: BasicInfo | Record<string, unknown>): BasicInfo {
+  const b = basicInfo as BasicInfo & Record<string, unknown>;
+  return { ...b, completionDate: typeof b.completionDate === "string" ? b.completionDate : "" };
+}
+
 export function normalizeShipCase(c: ShipCase): ShipCase {
   return {
     ...c,
+    basicInfo: normalizeBasicInfo(c.basicInfo ?? {}),
     workDayEntries: (c.workDayEntries || []).map((e) => normalizeWorkDayEntry(e)),
     materials: (c.materials || []).map((m) => normalizeMaterial(m)),
   };

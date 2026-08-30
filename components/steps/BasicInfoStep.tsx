@@ -174,6 +174,19 @@ export default function BasicInfoStep({ basicInfo, setBasicInfo }: Props) {
             onChange={(e) => updateField("receptionDate", e.target.value)}
           />
         </div>
+
+        <div>
+          <Label htmlFor="completionDate">完成日</Label>
+          <Input
+            id="completionDate"
+            type="date"
+            value={basicInfo.completionDate}
+            onChange={(e) => updateField("completionDate", e.target.value)}
+          />
+          <p className="mt-1 text-xs text-gray-600">
+            任意。材料持出表の「完成月日」に印字されます（未入力なら空欄）
+          </p>
+        </div>
       </div>
 
       <div className="bg-blue-50 p-4 rounded-lg text-sm text-blue-800">
