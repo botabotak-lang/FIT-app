@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -30,10 +30,19 @@ const STATUS_CONFIG: Record<CaseStatus, { label: string; color: string }> = {
 const UNKNOWN_KEY = "__unknown__";
 /** 受付年月セレクトの「すべて」を表す値（Radix Select は空文字を許容しないため） */
 const ALL_MONTHS = "__all__";
+/** 船名が未入力の案件をまとめる見出し */
+const UNNAMED_SHIP = "（船名未入力）";
 
-type ShipGroup = { key: string; shipName: string; cases: ShipCase[] };
-type MonthGroup = { key: string; label: string; count: number; ships: ShipGroup[] };
+type MonthGroup = { key: string; label: string; count: number; cases: ShipCase[] };
 type YearGroup = { key: string; label: string; count: number; months: MonthGroup[] };
+type ShipGroup = {
+  key: string;
+  shipName: string;
+  customer: string;
+  status: CaseStatus;
+  count: number;
+  years: YearGroup[];
+};
 
 /** "YYYY-MM-DD" → { year: "YYYY", month: "YYYY-MM" }。未入力・不正は UNKNOWN_KEY */
 function receptionYearMonth(c: ShipCase): { year: string; month: string } {
@@ -57,8 +66,12 @@ function compareCasesDesc(a: ShipCase, b: ShipCase): number {
   return b.updatedAt.localeCompare(a.updatedAt);
 }
 
-/** 年 ＞ 月 ＞ 船名 の3階層に組み立てる */
-function buildYearGroups(cases: ShipCase[]): YearGroup[] {
+function shipNameOf(c: ShipCase): string {
+  return c.basicInfo.shipName || UNNAMED_SHIP;
+}
+
+/** 1隻ぶんの案件を 年 ＞ 月 に分ける。受付日なしは月の階層を持たない1グループにまとめる */
+function buildYearGroups(shipKey: string, cases: ShipCase[]): YearGroup[] {
   const years = new Map<string, Map<string, ShipCase[]>>();
   for (const c of cases) {
     const { year, month } = receptionYearMonth(c);
@@ -73,35 +86,42 @@ function buildYearGroups(cases: ShipCase[]): YearGroup[] {
     .map(([yearKey, monthMap]) => {
       const months: MonthGroup[] = Array.from(monthMap.entries())
         .sort((a, b) => compareKeysDesc(a[0], b[0]))
-        .map(([monthKey, list]) => {
-          const shipMap = new Map<string, ShipCase[]>();
-          for (const c of list) {
-            const name = c.basicInfo.shipName || "（船名未入力）";
-            if (!shipMap.has(name)) shipMap.set(name, []);
-            shipMap.get(name)!.push(c);
-          }
-          const ships: ShipGroup[] = Array.from(shipMap.entries())
-            .sort((a, b) => a[0].localeCompare(b[0], "ja"))
-            .map(([shipName, shipCases]) => ({
-              key: `${monthKey}::${shipName}`,
-              shipName,
-              cases: [...shipCases].sort(compareCasesDesc),
-            }));
-          return {
-            key: monthKey,
-            label:
-              monthKey === UNKNOWN_KEY
-                ? ""
-                : `${Number(monthKey.slice(5, 7))}月`,
-            count: list.length,
-            ships,
-          };
-        });
+        .map(([monthKey, list]) => ({
+          key: `${shipKey}::${monthKey}`,
+          // 受付日なしは月見出しを出さず、年の直下に案件を並べる
+          label: monthKey === UNKNOWN_KEY ? "" : `${Number(monthKey.slice(5, 7))}月`,
+          count: list.length,
+          cases: [...list].sort(compareCasesDesc),
+        }));
       return {
-        key: yearKey,
+        key: `${shipKey}::${yearKey}`,
         label: yearKey === UNKNOWN_KEY ? "未分類（受付日なし）" : `${yearKey}年`,
         count: months.reduce((s, m) => s + m.count, 0),
         months,
+      };
+    });
+}
+
+/** 船名 ＞ 年 ＞ 月 ＞ 案件 の4階層に組み立てる（船名は五十音順） */
+function buildShipGroups(cases: ShipCase[]): ShipGroup[] {
+  const ships = new Map<string, ShipCase[]>();
+  for (const c of cases) {
+    const name = shipNameOf(c);
+    if (!ships.has(name)) ships.set(name, []);
+    ships.get(name)!.push(c);
+  }
+
+  return Array.from(ships.entries())
+    .sort((a, b) => a[0].localeCompare(b[0], "ja"))
+    .map(([shipName, list]) => {
+      const latest = [...list].sort(compareCasesDesc)[0];
+      return {
+        key: shipName,
+        shipName,
+        customer: latest.basicInfo.customer,
+        status: latest.status,
+        count: list.length,
+        years: buildYearGroups(shipName, list),
       };
     });
 }
@@ -115,12 +135,11 @@ export default function HomePage() {
   const [cases, setCases] = useState<ShipCase[]>([]);
   const [search, setSearch] = useState("");
   const [monthFilter, setMonthFilter] = useState("");
+  const [expandedShips, setExpandedShips] = useState<Set<string>>(new Set());
   const [expandedYears, setExpandedYears] = useState<Set<string>>(new Set());
   const [expandedMonths, setExpandedMonths] = useState<Set<string>>(new Set());
-  const [expandedShips, setExpandedShips] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const expandInitializedRef = useRef(false);
 
   const refreshCases = useCallback(async () => {
     if (!isSupabaseConfigured()) {
@@ -192,27 +211,8 @@ export default function HomePage() {
     });
   }, [cases, search, monthFilter]);
 
-  const yearGroups = useMemo(() => buildYearGroups(filteredCases), [filteredCases]);
+  const shipGroups = useMemo(() => buildShipGroups(filteredCases), [filteredCases]);
   const isFiltering = search.trim() !== "" || monthFilter !== "";
-  const shipCount = useMemo(
-    () =>
-      new Set(filteredCases.map((c) => c.basicInfo.shipName || "（船名未入力）"))
-        .size,
-    [filteredCases]
-  );
-
-  // 初回読み込み時のみ、最新の年・月だけを開いておく
-  useEffect(() => {
-    if (expandInitializedRef.current || cases.length === 0) return;
-    expandInitializedRef.current = true;
-    const groups = buildYearGroups(cases);
-    const latestYear = groups[0];
-    if (!latestYear) return;
-    setExpandedYears(new Set([latestYear.key]));
-    setExpandedMonths(
-      latestYear.months[0] ? new Set([latestYear.months[0].key]) : new Set()
-    );
-  }, [cases]);
 
   if (loading) {
     return (
@@ -232,15 +232,114 @@ export default function HomePage() {
     );
   }
 
-  /** 船名カード（展開すると案件一覧） */
-  const renderShipCard = (sg: ShipGroup) => {
-    const isExpanded = expandedShips.has(sg.key);
-    const latestCase = sg.cases[0];
-    const statusCfg = STATUS_CONFIG[latestCase.status];
+  /** 案件1件の行 */
+  const renderCaseRow = (c: ShipCase) => {
+    const cfg = STATUS_CONFIG[c.status];
+    return (
+      <div
+        key={c.id}
+        className="flex items-center justify-between px-4 py-3 hover:bg-gray-50 cursor-pointer border-b border-gray-50 last:border-0"
+        onClick={() => router.push(`/case/${c.id}`)}
+      >
+        <div className="flex items-center gap-3">
+          <FileText className="w-4 h-4 text-gray-400 shrink-0" />
+          <div>
+            <div className="text-sm font-medium text-gray-900">
+              {c.basicInfo.category || "（科目未入力）"}
+            </div>
+            <div className="text-xs text-gray-500">
+              {c.basicInfo.receptionDate
+                ? new Date(
+                    c.basicInfo.receptionDate + "T12:00:00"
+                  ).toLocaleDateString("ja-JP")
+                : "—"}
+            </div>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className={`text-xs px-2 py-1 rounded-full font-medium ${cfg.color}`}>
+            {cfg.label}
+          </span>
+          <button
+            onClick={(e) => void handleDelete(c.id, e)}
+            className="p-1 text-gray-400 hover:text-red-500 transition-colors"
+            aria-label="削除"
+          >
+            <Trash2 className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
+    );
+  };
 
+  /** 月見出し（展開すると案件一覧） */
+  const renderMonthGroup = (mg: MonthGroup) => {
+    // 受付日なしのグループは月見出しを挟まず案件を直接並べる
+    if (mg.label === "") {
+      return (
+        <div key={mg.key} className="bg-white rounded-lg shadow-sm overflow-hidden">
+          {mg.cases.map(renderCaseRow)}
+        </div>
+      );
+    }
+    const isOpen = isFiltering || expandedMonths.has(mg.key);
+    return (
+      <div key={mg.key} className="space-y-2">
+        <button
+          className="w-full flex items-center justify-between px-3 py-2 rounded-lg bg-white shadow-sm hover:bg-gray-50 transition-colors"
+          onClick={() => toggleKey(setExpandedMonths, mg.key)}
+        >
+          <div className="flex items-center gap-2">
+            {isOpen ? (
+              <ChevronDown className="w-4 h-4 text-gray-400" />
+            ) : (
+              <ChevronRight className="w-4 h-4 text-gray-400" />
+            )}
+            <span className="font-semibold text-gray-800">{mg.label}</span>
+          </div>
+          <span className="text-xs text-gray-500">{mg.count}件</span>
+        </button>
+        {isOpen && (
+          <div className="bg-white rounded-lg shadow-sm overflow-hidden">
+            {mg.cases.map(renderCaseRow)}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  /** 年見出し（展開すると月見出し） */
+  const renderYearGroup = (yg: YearGroup) => {
+    const isOpen = isFiltering || expandedYears.has(yg.key);
+    return (
+      <div key={yg.key} className="space-y-2">
+        <button
+          className="w-full flex items-center justify-between px-3 py-2 rounded-lg bg-gray-100 hover:bg-gray-200 transition-colors"
+          onClick={() => toggleKey(setExpandedYears, yg.key)}
+        >
+          <div className="flex items-center gap-2">
+            {isOpen ? (
+              <ChevronDown className="w-4 h-4 text-gray-500" />
+            ) : (
+              <ChevronRight className="w-4 h-4 text-gray-500" />
+            )}
+            <span className="font-bold text-gray-900">{yg.label}</span>
+          </div>
+          <span className="text-xs text-gray-500">{yg.count}件</span>
+        </button>
+        {isOpen && (
+          <div className="space-y-2 pl-2">{yg.months.map(renderMonthGroup)}</div>
+        )}
+      </div>
+    );
+  };
+
+  /** 船名カード（展開すると年 ＞ 月 ＞ 案件） */
+  const renderShipCard = (sg: ShipGroup) => {
+    const isOpen = isFiltering || expandedShips.has(sg.key);
+    const statusCfg = STATUS_CONFIG[sg.status];
     return (
       <div key={sg.key} className="bg-white rounded-xl shadow-sm overflow-hidden">
-        {/* 船名カード */}
         <button
           className="w-full flex items-center justify-between p-4 hover:bg-gray-50 transition-colors"
           onClick={() => toggleKey(setExpandedShips, sg.key)}
@@ -250,7 +349,7 @@ export default function HomePage() {
             <div className="text-left">
               <div className="font-semibold text-gray-900">{sg.shipName}</div>
               <div className="text-sm text-gray-500">
-                {latestCase.basicInfo.customer} ・ {sg.cases.length}件
+                {sg.customer} ・ {sg.count}件
               </div>
             </div>
           </div>
@@ -258,7 +357,7 @@ export default function HomePage() {
             <span className={`text-xs px-2 py-1 rounded-full font-medium ${statusCfg.color}`}>
               {statusCfg.label}
             </span>
-            {isExpanded ? (
+            {isOpen ? (
               <ChevronDown className="w-4 h-4 text-gray-400" />
             ) : (
               <ChevronRight className="w-4 h-4 text-gray-400" />
@@ -266,47 +365,9 @@ export default function HomePage() {
           </div>
         </button>
 
-        {/* 案件一覧（展開時） */}
-        {isExpanded && (
-          <div className="border-t border-gray-100">
-            {sg.cases.map((c) => {
-              const cfg = STATUS_CONFIG[c.status];
-              return (
-                <div
-                  key={c.id}
-                  className="flex items-center justify-between px-4 py-3 hover:bg-gray-50 cursor-pointer border-b border-gray-50 last:border-0"
-                  onClick={() => router.push(`/case/${c.id}`)}
-                >
-                  <div className="flex items-center gap-3">
-                    <FileText className="w-4 h-4 text-gray-400 shrink-0" />
-                    <div>
-                      <div className="text-sm font-medium text-gray-900">
-                        {c.basicInfo.category || "（科目未入力）"}
-                      </div>
-                      <div className="text-xs text-gray-500">
-                        {c.basicInfo.receptionDate
-                          ? new Date(
-                              c.basicInfo.receptionDate + "T12:00:00"
-                            ).toLocaleDateString("ja-JP")
-                          : "—"}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className={`text-xs px-2 py-1 rounded-full font-medium ${cfg.color}`}>
-                      {cfg.label}
-                    </span>
-                    <button
-                      onClick={(e) => void handleDelete(c.id, e)}
-                      className="p-1 text-gray-400 hover:text-red-500 transition-colors"
-                      aria-label="削除"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
+        {isOpen && (
+          <div className="border-t border-gray-100 bg-gray-50 p-3 space-y-2">
+            {sg.years.map(renderYearGroup)}
           </div>
         )}
       </div>
@@ -388,11 +449,11 @@ export default function HomePage() {
         </div>
 
         <p className="text-sm text-gray-500 mb-4">
-          {shipCount}隻 / {filteredCases.length}件
+          {shipGroups.length}隻 / {filteredCases.length}件
           {isFiltering && `（全${cases.length}件）`}
         </p>
 
-        {/* 一覧（年 ＞ 月 ＞ 船名 ＞ 案件） */}
+        {/* 一覧（船名 ＞ 年 ＞ 月 ＞ 案件） */}
         {filteredCases.length === 0 ? (
           <div className="text-center py-16 text-gray-400">
             <Ship className="w-12 h-12 mx-auto mb-3 opacity-30" />
@@ -407,76 +468,7 @@ export default function HomePage() {
             )}
           </div>
         ) : (
-          <div className="space-y-3">
-            {yearGroups.map((yg) => {
-              // 絞り込み中は該当する年・月を自動で開く
-              const yearOpen = isFiltering || expandedYears.has(yg.key);
-              return (
-                <div key={yg.key} className="space-y-2">
-                  {/* 年 */}
-                  <button
-                    className="w-full flex items-center justify-between px-3 py-2 rounded-lg bg-gray-100 hover:bg-gray-200 transition-colors"
-                    onClick={() => toggleKey(setExpandedYears, yg.key)}
-                  >
-                    <div className="flex items-center gap-2">
-                      {yearOpen ? (
-                        <ChevronDown className="w-4 h-4 text-gray-500" />
-                      ) : (
-                        <ChevronRight className="w-4 h-4 text-gray-500" />
-                      )}
-                      <span className="font-bold text-gray-900">{yg.label}</span>
-                    </div>
-                    <span className="text-xs text-gray-500">{yg.count}件</span>
-                  </button>
-
-                  {yearOpen && (
-                    <div className="space-y-2 pl-2">
-                      {yg.months.map((mg) => {
-                        // 「未分類」は月の階層を作らず船名カードを直接並べる
-                        if (mg.label === "") {
-                          return (
-                            <div key={mg.key} className="space-y-2">
-                              {mg.ships.map(renderShipCard)}
-                            </div>
-                          );
-                        }
-                        const monthOpen = isFiltering || expandedMonths.has(mg.key);
-                        return (
-                          <div key={mg.key} className="space-y-2">
-                            {/* 月 */}
-                            <button
-                              className="w-full flex items-center justify-between px-3 py-2 rounded-lg bg-white shadow-sm hover:bg-gray-50 transition-colors"
-                              onClick={() => toggleKey(setExpandedMonths, mg.key)}
-                            >
-                              <div className="flex items-center gap-2">
-                                {monthOpen ? (
-                                  <ChevronDown className="w-4 h-4 text-gray-400" />
-                                ) : (
-                                  <ChevronRight className="w-4 h-4 text-gray-400" />
-                                )}
-                                <span className="font-semibold text-gray-800">
-                                  {mg.label}
-                                </span>
-                              </div>
-                              <span className="text-xs text-gray-500">
-                                {mg.count}件
-                              </span>
-                            </button>
-
-                            {monthOpen && (
-                              <div className="space-y-2 pl-2">
-                                {mg.ships.map(renderShipCard)}
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
+          <div className="space-y-3">{shipGroups.map(renderShipCard)}</div>
         )}
       </div>
     </main>
