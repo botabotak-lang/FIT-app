@@ -1,4 +1,5 @@
 import datetime
+import re
 from pathlib import Path
 
 import openpyxl
@@ -8,6 +9,7 @@ ROOT = Path(__file__).resolve().parents[1]
 OUTPUT = ROOT / "docs/verify/sample_output.xlsx"
 MATERIALS_ONLY = ROOT / "docs/verify/sample_materials.xlsx"
 SIX_WORKERS = ROOT / "docs/verify/sample_output_6workers.xlsx"
+REPORT_WORKBOOK_TS = ROOT / "lib/reportWorkbook.ts"
 
 # render_sample.mjs の既定は架空の作業者4名（作業者A〜作業者D。本番マスタと同じ人数・並び順）
 MATERIAL_SHEETS = ["材料持出表", "材料持出表 (2)", "材料持出表 (3)", "材料持出表 (4)"]
@@ -20,6 +22,23 @@ COMPLETION_SERIAL = (COMPLETION_DATE - EXCEL_EPOCH).days
 # 合計セル（ラベル AF/AO の右の結合セル）。1ページ目は行25・2ページ目以降は行26
 FIRST_TOTAL = ("AJ25", "=SUM(AJ12:AJ24)", "AS25", "=SUM(AS12:AS24)")
 REST_TOTAL = ("AJ26", "=SUM(AJ3:AJ25)", "AS26", "=SUM(AS3:AS25)")
+
+# 材料持出表1ページ目の工賃「合計」行（行9）。氏名枠は行3〜8の6枠
+MATERIAL_WORKER_ROWS = 6
+MATERIAL_TOTAL_ROW = 9
+MATERIAL_TOTAL_VALUES = {
+    "A": "合計",
+    "G": "=SUM(G3:L8)",
+    "M": "=SUM(M3:R8)",
+    "S": "=SUM(S3:X8)",
+    "Y": "=SUM(Y3:AD8)",
+    "AE": "=SUM(AE3:AJ8)",
+    "AK": "=SUM(AK3:AN8)",
+    "AO": "=SUM(AO3:AT8)",
+}
+# 作業者の氏名が入り得る行（6枠）のうち、社員4名のサンプルで空欄になる行
+EMPTY_WORKER_ROWS = (7, 8)
+WORKER_COLS = ("A", "G", "S", "Y", "AK", "M", "AE", "AO")
 
 
 def is_formula(value):
@@ -44,6 +63,31 @@ def check_material_totals(wb):
         assert ws[sell_cell].value == sell_formula, f"{name}!{sell_cell}={ws[sell_cell].value!r}"
 
 
+def check_show_zeros(wb, label):
+    """全シートで「ゼロ値を表示しない」（sheetView showZeros=0）が有効であること"""
+    for ws in wb.worksheets:
+        assert ws.sheet_view.showZeros is False, f"{label}!{ws.title} showZeros={ws.sheet_view.showZeros!r}"
+
+
+def check_material_total_row(ws, label):
+    """材料持出表1ページ目の行9が工賃の「合計」行であること"""
+    for col, expected in MATERIAL_TOTAL_VALUES.items():
+        actual = ws[f"{col}{MATERIAL_TOTAL_ROW}"].value
+        assert actual == expected, f"{label}!{col}{MATERIAL_TOTAL_ROW}={actual!r}（期待: {expected!r}）"
+    assert ws[f"AU{MATERIAL_TOTAL_ROW}"].value is None, ws[f"AU{MATERIAL_TOTAL_ROW}"].value
+
+
+def check_worker_row_capacity():
+    """氏名枠は6枠。7名以上で容量警告が出る境界（コード確認）"""
+    source = REPORT_WORKBOOK_TS.read_text(encoding="utf-8")
+    m = re.search(r"const MATERIAL_WORKER_ROWS = (\d+);", source)
+    assert m, "MATERIAL_WORKER_ROWS が見つかりません"
+    assert int(m.group(1)) == MATERIAL_WORKER_ROWS, m.group(1)
+    # 警告は「枠数を超えたとき」だけ出す＝6名はOK・7名で警告
+    assert "workerCount > MATERIAL_WORKER_ROWS" in source, "容量警告の条件が変わっています"
+    return int(m.group(1))
+
+
 def to_hours(value):
     """h:mm 書式のセルは timedelta / time で返るので時間数に直す"""
     if isinstance(value, datetime.timedelta):
@@ -65,6 +109,10 @@ def check_all():
     assert ws["BB5"].value == "TEST-100"
     # 製造者の値セルは BU5（BS5:BT8 はラベル）
     assert ws["BU5"].value == "サンプル電機", ws["BU5"].value
+    # 縦書きラベル「製造者」は8pt（10ptだと3文字目が印刷で切れる）
+    assert ws["BS5"].value == "製造者", ws["BS5"].value
+    assert ws["BS5"].font.sz == 8, ws["BS5"].font.sz
+    assert ws["BS5"].alignment.textRotation == 255, ws["BS5"].alignment.textRotation
 
     # 作業報告書：1ブロック目（移動 8:00〜9:00）と作業内容の1行目
     assert ws["B11"].value is not None
@@ -97,10 +145,12 @@ def check_all():
     assert mat["A3"].value == "作業者A"
     assert mat["A6"].value == "作業者D"
     assert mat["G3"].value == "=SUM('作業報告書:作業報告書 (END)'!CJ139)", mat["G3"].value
-    # 社員は4名なので行7〜9は空欄（0を印字しない）
-    for row in (7, 8, 9):
-        for col in ("A", "G", "S", "Y", "AK", "M", "AE", "AO"):
+    # 社員は4名なので氏名枠の残り（行7〜8）は空欄（0を印字しない）
+    for row in EMPTY_WORKER_ROWS:
+        for col in WORKER_COLS:
             assert mat[f"{col}{row}"].value is None, f"{col}{row}={mat[f'{col}{row}'].value!r}"
+    # 行9は工賃の「合計」行
+    check_material_total_row(mat, "帳票一式")
     assert mat["A12"].value is not None
     assert mat["E12"].value == "サンプルボルト"
     assert mat["U13"].value == "✓"
@@ -127,6 +177,8 @@ def check_all():
 
     # 仕入合計・売値合計の SUM 数式
     check_material_totals(wb)
+    # 全シートでゼロ値非表示
+    check_show_zeros(wb, "帳票一式")
 
     # 14件目以降は2ページ目へ
     assert wb["材料持出表 (2)"]["E3"].value == "サンプル絶縁テープ"
@@ -153,10 +205,12 @@ def check_materials_only():
     assert abs(to_hours(ws["G5"].value) - 6) < 1e-6, ws["G5"].value
     assert abs(to_hours(ws["S5"].value) - 2) < 1e-6, ws["S5"].value
     assert abs(to_hours(ws["AK5"].value) - 1) < 1e-6, ws["AK5"].value
-    # 空き枠（行7〜9）は 0 ではなく空欄
-    for row in (7, 8, 9):
-        for col in ("A", "G", "S", "Y", "AK", "M", "AE", "AO"):
+    # 空き枠（行7〜8）は 0 ではなく空欄
+    for row in EMPTY_WORKER_ROWS:
+        for col in WORKER_COLS:
             assert ws[f"{col}{row}"].value is None, f"{col}{row}={ws[f'{col}{row}'].value!r}"
+    # 単体出力（値を書く方式）でも行9の合計は SUM 数式のまま
+    check_material_total_row(ws, "材料持出表のみ")
     # 工賃の数式は残る（値を掛けるだけなので #REF! にならない）
     assert is_formula(ws["M3"].value), ws["M3"].value
     # 船名・科目・型名は値で書かれている（作業報告書への参照ではない）
@@ -165,6 +219,7 @@ def check_materials_only():
     assert to_date_serial(ws["AX1"].value) == COMPLETION_SERIAL, ws["AX1"].value
     # 材料持出表のみの出力でも合計は SUM 数式
     check_material_totals(wb)
+    check_show_zeros(wb, "材料持出表のみ")
     return ws
 
 
@@ -188,10 +243,11 @@ def check_six_workers():
     page2 = wb["作業報告書 (2)"]
     assert page2["ED2"].value == "所要時間　作業者F", page2["ED2"].value
     assert page2["EH4"].value == '=IF(Q4="作業者F",E7-E4,0)', page2["EH4"].value
-    # 材料持出表は7行しかないので6名は全員入る（行9のみ空欄）
+    # 材料持出表の氏名枠は行3〜8の6枠なので6名がちょうど入る（行9は合計行）
     mat = wb["材料持出表"]
     assert mat["A8"].value == "作業者F", mat["A8"].value
-    assert mat["A9"].value is None, mat["A9"].value
+    check_material_total_row(mat, "6名レンダー")
+    check_show_zeros(wb, "6名レンダー")
     return ws
 
 
@@ -199,12 +255,14 @@ def main():
     ws, mat = check_all()
     mat_only = check_materials_only()
     six = check_six_workers()
+    slots = check_worker_row_capacity()
     print("verify_output.py: OK")
-    print(f"BU2={ws['BU2'].value} BU5={ws['BU5'].value} W11={ws['W11'].value}")
-    print(f"材料持出表(統合) A3={mat['A3'].value} G3={mat['G3'].value} G8={mat['G8'].value!r} G9={mat['G9'].value!r}")
-    print(f"材料持出表(単体) G3={mat_only['G3'].value} S3={mat_only['S3'].value} G5={mat_only['G5'].value}")
+    print(f"BU2={ws['BU2'].value} BU5={ws['BU5'].value} BS5={ws['BS5'].value}({ws['BS5'].font.sz}pt) W11={ws['W11'].value}")
+    print(f"材料持出表(統合) A3={mat['A3'].value} G3={mat['G3'].value} A8={mat['A8'].value!r} A9={mat['A9'].value!r} G9={mat['G9'].value!r}")
+    print(f"材料持出表(単体) G3={mat_only['G3'].value} S3={mat_only['S3'].value} G5={mat_only['G5'].value} G9={mat_only['G9'].value}")
     print(f"完成月日 AX1={mat['AX1'].value} 合計 AJ25={mat['AJ25'].value} AS25={mat['AS25'].value}")
     print(f"6名レンダー ED9={six['ED9'].value} EH11={six['EH11'].value}")
+    print(f"氏名枠 {slots}枠（{slots + 1}名以上で容量警告） / 出力3種の全シート showZeros=False")
 
 
 if __name__ == "__main__":

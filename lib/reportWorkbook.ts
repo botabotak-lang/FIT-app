@@ -1,4 +1,5 @@
 import ExcelJS from "exceljs";
+import { disableShowZeros } from "./xlsxShowZeros";
 import type { BasicInfo, Material, ShipCase, TimeBlockKind, WorkDayEntry } from "./types";
 import { workReportYearLabel } from "./workReportLayout";
 import { travelHourlyRate, type LaborRates } from "./laborRates";
@@ -27,8 +28,8 @@ const WORKER_COL_STRIDE = 10;
 const WORKER_VALUE_COL_OFFSET = 4;
 /** テンプレートに書式が用意されている枠数 */
 const WORKER_TEMPLATE_SLOTS = 5;
-/** 材料持出表の作業者別集計行（行3〜9） */
-const MATERIAL_WORKER_ROWS = 7;
+/** 材料持出表の作業者別集計の氏名枠（行3〜8の6枠。行9は工賃の「合計」行） */
+const MATERIAL_WORKER_ROWS = 6;
 
 function columnIndexOf(letter: string): number {
   let index = 0;
@@ -345,6 +346,18 @@ function removeUnneededSheets(wb: ExcelJS.Workbook, kind: ReportWorkbookKind): v
   }
 }
 
+/**
+ * 全ワークシートに「ゼロ値を表示しない」を設定する（既存の view 設定は維持）。
+ * ExcelJS 4.4 はこの属性を出力しないため、実際の書き込みは
+ * createReportWorkbookBuffer で disableShowZeros が行う。
+ */
+function hideZeroValues(wb: ExcelJS.Workbook): void {
+  for (const ws of wb.worksheets) {
+    const views = ws.views.length > 0 ? ws.views : [{}];
+    ws.views = views.map((view) => ({ ...view, showZeros: false })) as typeof ws.views;
+  }
+}
+
 export async function createReportWorkbook(
   templateBuffer: ArrayBuffer,
   shipCase: Pick<ShipCase, "basicInfo" | "workDayEntries" | "materials">,
@@ -366,6 +379,7 @@ export async function createReportWorkbook(
     kind === "materials" ? sumHoursByWorker(shipCase.workDayEntries) : null
   );
   removeUnneededSheets(wb, kind);
+  hideZeroValues(wb);
   return wb;
 }
 
@@ -375,9 +389,10 @@ export async function createReportWorkbookBuffer(
   employees: string[],
   kind: ReportWorkbookKind,
   rates: LaborRates
-): Promise<ExcelJS.Buffer> {
+): Promise<Uint8Array<ArrayBuffer>> {
   const wb = await createReportWorkbook(templateBuffer, shipCase, employees, kind, rates);
-  return wb.xlsx.writeBuffer();
+  const buffer = await wb.xlsx.writeBuffer();
+  return disableShowZeros(buffer as ArrayBuffer);
 }
 
 function filename(kind: ReportWorkbookKind, basicInfo: BasicInfo): string {

@@ -6,6 +6,7 @@
 
 import re
 import sys
+from copy import copy
 from pathlib import Path
 
 import openpyxl
@@ -14,8 +15,12 @@ from openpyxl.utils import column_index_from_string, get_column_letter
 
 
 ROOT = Path(__file__).resolve().parents[1]
-SOURCE = ROOT / "docs/reference/FIT様式_作業報告書_材料持出表_原本20260829.xlsx"
+REFERENCE_DIR = ROOT / "docs/reference"
+SOURCE = REFERENCE_DIR / "FIT様式_作業報告書_材料持出表_原本20260829.xlsx"
 DEST = ROOT / "public/templates/fit_report_template.xlsx"
+# 工賃「合計」行の見本（クライアントが手で追加したファイル・Git管理外）。
+# ファイル名に実船名・氏名が入るためパターンで探す
+TOTAL_ROW_SAMPLE_GLOB = "*材料持出表*20260908受領.xlsx"
 
 WORK_SHEETS = [
     "作業報告書",
@@ -48,6 +53,29 @@ WORKER_VALUE_COLS = ["CJ", "CT", "DD", "DN", "DX"]
 WORKER_TOTAL_LABEL_ROW = 136
 WORKER_NAME_LIST_COL = "Q"
 WORKER_NAME_LIST_ROWS = range(137, 142)
+
+# 材料持出表（1ページ目）の作業者別工賃集計。行3〜8が氏名枠・行9が「合計」行
+MATERIAL_WORKER_ROWS = range(3, 9)
+MATERIAL_TOTAL_ROW = 9
+# 「合計」行の値（見本ファイルと同じ。SUM は結合セルの左端から右端までを足す）
+MATERIAL_TOTAL_VALUES = {
+    "A": "合計",
+    "G": "=SUM(G3:L8)",
+    "M": "=SUM(M3:R8)",
+    "S": "=SUM(S3:X8)",
+    "Y": "=SUM(Y3:AD8)",
+    "AE": "=SUM(AE3:AJ8)",
+    "AK": "=SUM(AK3:AN8)",
+    "AO": "=SUM(AO3:AT8)",
+}
+# 「合計」行の書式をコピーする列範囲（印刷範囲は A1:BB25）
+MATERIAL_TOTAL_LAST_COL = "BB"
+
+# 作業報告書のラベル「製造者」。縦書き（textRotation=255）の結合セル BS5:BT8 で、
+# 10pt だと3文字目が枠の高さに収まらず「製造」までしか印刷されない。
+# 結合セルでは Excel の「縮小して全体を表示」が効かないため、フォントサイズを下げる
+MANUFACTURER_LABEL_CELL = "BS5"
+MANUFACTURER_LABEL_FONT_SIZE = 8
 
 
 def worker_placeholder(slot):
@@ -92,11 +120,51 @@ def clear_work_report(ws, first_page):
             clear_if_not_formula(ws, f"{col}{row + 3}")
 
 
+def total_row_sample_path():
+    """工賃「合計」行の見本ファイル（無ければ None）"""
+    matches = sorted(REFERENCE_DIR.glob(TOTAL_ROW_SAMPLE_GLOB))
+    return matches[0] if matches else None
+
+
+def copy_cell_style(src, dst):
+    """別ブックのセル書式をコピーする（スタイルIDはブックごとに違うため実体を複製する）"""
+    dst.font = copy(src.font)
+    dst.fill = copy(src.fill)
+    dst.border = copy(src.border)
+    dst.alignment = copy(src.alignment)
+    dst.protection = copy(src.protection)
+    dst.number_format = src.number_format
+
+
+def apply_material_total_row(ws, sample_ws):
+    """材料持出表1ページ目の行9を「合計」行にする（書式は見本ファイルの行9から複製）"""
+    last = column_index_from_string(MATERIAL_TOTAL_LAST_COL)
+    for idx in range(1, last + 1):
+        copy_cell_style(
+            sample_ws.cell(row=MATERIAL_TOTAL_ROW, column=idx),
+            ws.cell(row=MATERIAL_TOTAL_ROW, column=idx),
+        )
+    for idx in range(1, last + 1):
+        cell = ws.cell(row=MATERIAL_TOTAL_ROW, column=idx)
+        if isinstance(cell, MergedCell):
+            continue
+        cell.value = MATERIAL_TOTAL_VALUES.get(get_column_letter(idx))
+    ws.row_dimensions[MATERIAL_TOTAL_ROW].height = sample_ws.row_dimensions[MATERIAL_TOTAL_ROW].height
+
+
+def fit_manufacturer_label(ws):
+    """「製造者」ラベルが印刷時に切れないよう、フォントサイズだけを下げる（配置は原本のまま）"""
+    cell = ws[MANUFACTURER_LABEL_CELL]
+    font = copy(cell.font)
+    font.sz = MANUFACTURER_LABEL_FONT_SIZE
+    cell.font = font
+
+
 def clear_materials(ws, first_page):
     if first_page:
         for cell in ("D1", "S1", "AH1", "AX1"):
             clear_if_not_formula(ws, cell)
-        for row in range(3, 10):
+        for row in MATERIAL_WORKER_ROWS:
             clear_if_not_formula(ws, f"A{row}")
             clear_if_not_formula(ws, f"AU{row}")
         carrier_cell = "Z25"
@@ -243,8 +311,10 @@ def clear_metadata(wb):
 
 
 def main():
-    if not SOURCE.exists():
-        print(f"原本が見つかりません: {SOURCE}")
+    sample_path = total_row_sample_path()
+    if not SOURCE.exists() or sample_path is None:
+        missing = SOURCE if not SOURCE.exists() else REFERENCE_DIR / TOTAL_ROW_SAMPLE_GLOB
+        print(f"原本が見つかりません: {missing}")
         print("原本は実データを含むためリポジトリに含めていません。")
         print("テンプレート（public/templates/fit_report_template.xlsx）はコミット済みのものを使用してください。")
         return 0
@@ -253,8 +323,11 @@ def main():
     for i, name in enumerate(WORK_SHEETS):
         clear_work_report(wb[name], i == 0)
         neutralize_worker_names(wb[name], i == 0)
+    fit_manufacturer_label(wb[WORK_SHEETS[0]])
     for i, name in enumerate(MATERIAL_SHEETS):
         clear_materials(wb[name], i == 0)
+    sample = openpyxl.load_workbook(sample_path)
+    apply_material_total_row(wb[MATERIAL_SHEETS[0]], sample[MATERIAL_SHEETS[0]])
     clear_metadata(wb)
 
     bad = check_material_sum_formulas(wb)
@@ -279,6 +352,8 @@ def main():
     DEST.parent.mkdir(parents=True, exist_ok=True)
     wb.save(DEST)
     print(f"created {DEST}")
+    print(f"製造者ラベル {MANUFACTURER_LABEL_CELL}: {MANUFACTURER_LABEL_FONT_SIZE}pt（縦書き3文字が枠に収まるサイズ）")
+    print(f"材料持出表 行{MATERIAL_TOTAL_ROW}: 合計行（氏名枠は行3〜8の6枠）")
     print("残存値スキャン: 0 件（明細領域・作業報告書ブロック領域）")
     print(f"氏名スキャン: 0 件（原本の氏名 {len(worker_names)} 名を全シート走査）")
     return 0
