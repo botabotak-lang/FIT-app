@@ -36,7 +36,13 @@ import {
 import { confirmReportCapacity, downloadReportWorkbook } from "@/lib/reportWorkbook";
 import { DEFAULT_LINE_LIMIT, overLimitLines, overLimitMessage } from "@/lib/lineWidth";
 import { parseWorkReportWorkbook } from "@/lib/reportImport";
-import { formatImportErrors, mergeBreakBlocks } from "@/lib/reportImportUi";
+import {
+  emptyImportMessage,
+  formatImportErrors,
+  isOversizeImportFile,
+  mergeBreakBlocks,
+  OVERSIZE_FILE_MESSAGE,
+} from "@/lib/reportImportUi";
 
 /** ファイル選択で受け付ける拡張子・MIME（自アプリが出力した .xlsx が前提） */
 const XLSX_ACCEPT =
@@ -166,12 +172,21 @@ export default function WorkReportStep({
     // 同じファイルをもう一度選べるように、ここで選択をリセットしておく
     e.target.value = "";
     if (!file) return;
+    if (isOversizeImportFile(file)) {
+      setImportErrors([OVERSIZE_FILE_MESSAGE]);
+      return;
+    }
     setImporting(true);
     setImportErrors([]);
     try {
       const result = await parseWorkReportWorkbook(await file.arrayBuffer());
       if (result.errors.length > 0) {
         setImportErrors(formatImportErrors(result.errors));
+        return;
+      }
+      // 0件で置き換えると既存データが全消しになるため、確認を出さずに中止する
+      if (result.data.length === 0) {
+        setImportErrors([emptyImportMessage("work")]);
         return;
       }
       const ok = window.confirm(

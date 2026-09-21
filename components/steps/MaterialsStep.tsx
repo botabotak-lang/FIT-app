@@ -16,7 +16,12 @@ import {
 } from "@/lib/laborRates";
 import { matchesAllTerms, searchTerms } from "@/lib/searchText";
 import { parseMaterialsWorkbook } from "@/lib/reportImport";
-import { formatImportErrors } from "@/lib/reportImportUi";
+import {
+  emptyImportMessage,
+  formatImportErrors,
+  isOversizeImportFile,
+  OVERSIZE_FILE_MESSAGE,
+} from "@/lib/reportImportUi";
 
 /** 候補リストに一度に描画する最大件数（製品マスタが数百〜千件でも重くならないように） */
 const SUGGEST_LIMIT = 50;
@@ -205,12 +210,21 @@ export default function MaterialsStep({ basicInfo, workDayEntries, materials, on
     // 同じファイルをもう一度選べるように、ここで選択をリセットしておく
     e.target.value = "";
     if (!file) return;
+    if (isOversizeImportFile(file)) {
+      setImportErrors([OVERSIZE_FILE_MESSAGE]);
+      return;
+    }
     setImporting(true);
     setImportErrors([]);
     try {
       const result = await parseMaterialsWorkbook(await file.arrayBuffer());
       if (result.errors.length > 0) {
         setImportErrors(formatImportErrors(result.errors));
+        return;
+      }
+      // 0件で置き換えると既存データが全消しになるため、確認を出さずに中止する
+      if (result.data.length === 0) {
+        setImportErrors([emptyImportMessage("materials")]);
         return;
       }
       const ok = window.confirm(

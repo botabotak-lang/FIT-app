@@ -5,6 +5,27 @@ import { newTimeBlockId } from "./workDayEntry";
 /** エラーが大量に出たときに画面が埋まらないよう、表示はここまで */
 const MAX_SHOWN_ERRORS = 10;
 
+/** 読み込めるファイルサイズの上限（10MB） */
+export const MAX_IMPORT_FILE_SIZE = 10 * 1024 * 1024;
+
+/** サイズ上限を超えたときの表示メッセージ */
+export const OVERSIZE_FILE_MESSAGE =
+  "読み取れませんでした：ファイルサイズが大きすぎます（10MBまで）";
+
+/** 上限を超えたファイルか（超えていたら読み込まずに中止する） */
+export function isOversizeImportFile(file: { size: number }): boolean {
+  return file.size > MAX_IMPORT_FILE_SIZE;
+}
+
+/**
+ * 読み取れた件数が0件のときの表示メッセージ。
+ * 0件で置き換えると既存データが全消しになるため、確認ダイアログを出さずに中止する。
+ */
+export function emptyImportMessage(kind: "work" | "materials"): string {
+  const label = kind === "work" ? "作業データ" : "材料データ";
+  return `読み取れる${label}がありませんでした（現在のデータは変更していません）`;
+}
+
 /** 読み込みエラーを「［シート名］12行目：理由」の形にする（row=0 はファイル全体のエラー） */
 export function formatImportErrors(errors: ReportImportError[]): string[] {
   const lines = errors.map((e) => {
