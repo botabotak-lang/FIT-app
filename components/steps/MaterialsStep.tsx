@@ -9,7 +9,11 @@ import { BasicInfo, Material, buildSupplierOptions, UNIT_OPTIONS, WorkDayEntry }
 import { Product, getActiveProducts } from "@/lib/productMaster";
 import { getActiveEmployees, Employee } from "@/lib/employeeMaster";
 import { confirmReportCapacity, downloadReportWorkbook } from "@/lib/reportWorkbook";
-import { DEFAULT_LABOR_RATES, getLaborRates, type LaborRates } from "@/lib/laborRates";
+import {
+  DEFAULT_LABOR_RATES,
+  getLaborRatesForCustomer,
+  type LaborRates,
+} from "@/lib/laborRates";
 import { matchesAllTerms, searchTerms } from "@/lib/searchText";
 
 /** 候補リストに一度に描画する最大件数（製品マスタが数百〜千件でも重くならないように） */
@@ -59,10 +63,14 @@ export default function MaterialsStep({ basicInfo, workDayEntries, materials, on
     getActiveEmployees()
       .then(setEmployees)
       .catch(() => setEmployees([]));
-    getLaborRates()
+  }, []);
+
+  // 請求先ごとの単価。請求先が変わったら取り直す
+  useEffect(() => {
+    getLaborRatesForCustomer(basicInfo.customer)
       .then(setRates)
       .catch(() => setRates(DEFAULT_LABOR_RATES));
-  }, []);
+  }, [basicInfo.customer]);
 
   const addToHistory = (productName: string) => {
     if (!productName || productHistory.includes(productName)) return;

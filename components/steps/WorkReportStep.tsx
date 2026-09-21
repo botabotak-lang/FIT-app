@@ -19,7 +19,11 @@ import {
   calcBlockHours,
   calcLaborCostForEntry,
 } from "@/lib/workDayEntry";
-import { DEFAULT_LABOR_RATES, getLaborRates, type LaborRates } from "@/lib/laborRates";
+import {
+  DEFAULT_LABOR_RATES,
+  getLaborRatesForCustomer,
+  type LaborRates,
+} from "@/lib/laborRates";
 import { getActiveEmployees, Employee } from "@/lib/employeeMaster";
 import {
   WORK_REPORT_TITLE_SPACED,
@@ -52,10 +56,14 @@ export default function WorkReportStep({
     getActiveEmployees()
       .then(setEmployees)
       .catch(() => setEmployees([]));
-    getLaborRates()
+  }, []);
+
+  // 請求先ごとの単価。請求先が変わったら取り直す
+  useEffect(() => {
+    getLaborRatesForCustomer(basicInfo.customer)
       .then(setRates)
       .catch(() => setRates(DEFAULT_LABOR_RATES));
-  }, []);
+  }, [basicInfo.customer]);
 
   const activeWorkerNames = useMemo(
     () => employees.map((e) => e.name),

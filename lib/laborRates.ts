@@ -19,6 +19,13 @@ const LABOR_RATES_KEY = "labor_rates";
 
 let cached: LaborRates | null = null;
 
+/**
+ * 顧客名 → その顧客の工賃単価。null は「個別設定なし＝全体設定を使う」。
+ * 全体設定キャッシュ（cached）とは別物なので、全体設定を保存したときは
+ * こちらも必ずクリアする（全体設定にぶら下がっている顧客が古い値を返すため）。
+ */
+const cachedByCustomer = new Map<string, LaborRates | null>();
+
 function toPositiveNumber(value: unknown, fallback: number): number {
   const n = typeof value === "number" ? value : Number(value);
   return Number.isFinite(n) && n > 0 ? n : fallback;
@@ -79,10 +86,67 @@ export async function saveLaborRates(rates: LaborRates): Promise<LaborRates> {
 
   if (error) throw new Error(`工賃単価の保存に失敗しました: ${error.message}`);
   cached = next;
+  // 個別設定なしの顧客は全体設定を写している。古い値が残らないよう捨てる
+  cachedByCustomer.clear();
   return next;
+}
+
+/**
+ * customers.labor_rates を1件だけ読む。
+ * 返り値：LaborRates=個別設定あり ／ null=個別設定なし ／ undefined=取得できず（列未適用・通信エラー等）
+ */
+async function fetchCustomerLaborRates(
+  name: string
+): Promise<LaborRates | null | undefined> {
+  try {
+    // 同名の顧客が複数あっても落ちないよう limit(1)。maybeSingle は使わない
+    const { data, error } = await supabase
+      .from("customers")
+      .select("labor_rates")
+      .eq("name", name)
+      .limit(1);
+
+    // labor_rates 列が未適用のDB（Phase E の SQL 未実行）でもここで止まらない
+    if (error) {
+      console.warn("顧客別の工賃単価を取得できないため全体設定を使います:", error.message);
+      return undefined;
+    }
+    const row = (data ?? [])[0] as { labor_rates?: unknown } | undefined;
+    // 顧客が見つからない（手入力の請求先など）＝個別設定なし
+    if (!row) return null;
+    const value = row.labor_rates;
+    return value == null ? null : normalizeLaborRates(value);
+  } catch (e) {
+    console.warn("顧客別の工賃単価を取得できないため全体設定を使います:", e);
+    return undefined;
+  }
+}
+
+/**
+ * 請求先ごとの工賃単価を取得する。個別設定が無ければ全体設定にフォールバックする。
+ * 顧客名が空、顧客が見つからない、列が未適用、いずれの場合も従来どおり全体設定で動く。
+ */
+export async function getLaborRatesForCustomer(
+  customerName: string
+): Promise<LaborRates> {
+  const key = (customerName ?? "").trim();
+  if (!key) return getLaborRates();
+
+  if (!cachedByCustomer.has(key)) {
+    const own = await fetchCustomerLaborRates(key);
+    // 取得できなかったときはキャッシュしない（次回あらためて取りにいく）
+    if (own !== undefined) cachedByCustomer.set(key, own);
+  }
+  return cachedByCustomer.get(key) ?? (await getLaborRates());
+}
+
+/** 顧客マスタを更新したとき用（顧客名の変更もあるので全件捨てる） */
+export function clearCustomerLaborRatesCache(): void {
+  cachedByCustomer.clear();
 }
 
 /** テスト・再読み込み用 */
 export function clearLaborRatesCache(): void {
   cached = null;
+  cachedByCustomer.clear();
 }

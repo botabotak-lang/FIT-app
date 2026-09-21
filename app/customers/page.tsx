@@ -184,7 +184,14 @@ function CustomerList({
           }`}
         >
           <div className="min-w-0 flex-1">
-            <p className="font-semibold text-gray-900 truncate">{c.name}</p>
+            <div className="flex items-center gap-2 min-w-0">
+              <p className="font-semibold text-gray-900 truncate">{c.name}</p>
+              {c.laborRates && (
+                <span className="shrink-0 text-[10px] font-medium text-blue-700 bg-blue-50 border border-blue-200 rounded px-1.5 py-0.5">
+                  個別単価あり
+                </span>
+              )}
+            </div>
             {(c.address || c.phone) && (
               <p className="text-xs text-gray-500 mt-0.5">
                 {c.address}

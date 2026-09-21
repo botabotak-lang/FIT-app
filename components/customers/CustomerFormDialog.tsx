@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Customer, CustomerInput } from "@/lib/customerMaster";
+import { DEFAULT_LABOR_RATES, getLaborRates, type LaborRates } from "@/lib/laborRates";
 
 type Props = {
   customer?: Customer;
@@ -18,12 +19,36 @@ const EMPTY: CustomerInput = {
   phone: "",
   notes: "",
   sortOrder: 0,
+  laborRates: null,
 };
+
+/** 単価3入力は文字列で持つ（空欄＝共通設定を使う、を表現するため） */
+type RateForm = { regular: string; holiday: string; travelFactor: string };
+
+const EMPTY_RATES: RateForm = { regular: "", holiday: "", travelFactor: "" };
+
+function toRateForm(rates: LaborRates | null): RateForm {
+  if (!rates) return EMPTY_RATES;
+  return {
+    regular: String(rates.regular),
+    holiday: String(rates.holiday),
+    travelFactor: String(rates.travelFactor),
+  };
+}
 
 export default function CustomerFormDialog({ customer, onSubmit, onCancel }: Props) {
   const [form, setForm] = useState<CustomerInput>(EMPTY);
+  const [rateForm, setRateForm] = useState<RateForm>(EMPTY_RATES);
+  const [globalRates, setGlobalRates] = useState<LaborRates>(DEFAULT_LABOR_RATES);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    // 共通設定は placeholder（空欄時に実際に使われる値）として見せる
+    getLaborRates()
+      .then(setGlobalRates)
+      .catch(() => setGlobalRates(DEFAULT_LABOR_RATES));
+  }, []);
 
   useEffect(() => {
     if (customer) {
@@ -33,14 +58,42 @@ export default function CustomerFormDialog({ customer, onSubmit, onCancel }: Pro
         phone: customer.phone,
         notes: customer.notes,
         sortOrder: customer.sortOrder,
+        laborRates: customer.laborRates,
       });
+      setRateForm(toRateForm(customer.laborRates));
     } else {
       setForm(EMPTY);
+      setRateForm(EMPTY_RATES);
     }
   }, [customer]);
 
-  const set = (field: keyof CustomerInput, value: string | number) => {
+  const set = (
+    field: Exclude<keyof CustomerInput, "laborRates">,
+    value: string | number
+  ) => {
     setForm((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const setRate = (field: keyof RateForm, value: string) => {
+    setRateForm((prev) => ({ ...prev, [field]: value }));
+  };
+
+  /**
+   * 3つとも空欄なら null（＝共通設定を使う）。
+   * 1つでも入っていれば個別単価として保存し、空欄の項目には共通設定の値を入れる
+   * （placeholder に出ている値がそのまま保存される）。
+   */
+  const buildLaborRates = (): LaborRates | null | "invalid" => {
+    const entries = Object.entries(rateForm) as [keyof RateForm, string][];
+    if (entries.every(([, v]) => v.trim() === "")) return null;
+    const next = { ...globalRates } as LaborRates;
+    for (const [field, raw] of entries) {
+      if (raw.trim() === "") continue;
+      const n = Number(raw);
+      if (!Number.isFinite(n) || n <= 0) return "invalid";
+      next[field] = n;
+    }
+    return next;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -49,10 +102,15 @@ export default function CustomerFormDialog({ customer, onSubmit, onCancel }: Pro
       setError("顧客名は必須です");
       return;
     }
+    const laborRates = buildLaborRates();
+    if (laborRates === "invalid") {
+      setError("単価・係数は0より大きい数値で入力してください（空欄は共通設定）");
+      return;
+    }
     setSubmitting(true);
     setError(null);
     try {
-      await onSubmit(form);
+      await onSubmit({ ...form, laborRates });
     } catch (err) {
       setError(err instanceof Error ? err.message : "保存に失敗しました");
     } finally {
@@ -111,6 +169,61 @@ export default function CustomerFormDialog({ customer, onSubmit, onCancel }: Pro
               onChange={(e) => set("sortOrder", Number(e.target.value) || 0)}
               className="mt-1 w-32"
             />
+          </div>
+          <div className="border-t pt-4 space-y-3">
+            <div>
+              <Label className="text-sm font-medium">この請求先の単価</Label>
+              <p className="text-xs text-gray-500 mt-1">
+                空欄なら共通設定（設定画面の工賃単価）を使用します。
+              </p>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div>
+                <Label className="text-xs text-gray-600">平日（円/h）</Label>
+                <Input
+                  type="number"
+                  inputMode="decimal"
+                  min="0"
+                  step="any"
+                  value={rateForm.regular}
+                  onChange={(e) => setRate("regular", e.target.value)}
+                  placeholder={String(globalRates.regular)}
+                  className="mt-1"
+                  aria-label="この請求先の平日単価（円/h）"
+                />
+              </div>
+              <div>
+                <Label className="text-xs text-gray-600">休日（円/h）</Label>
+                <Input
+                  type="number"
+                  inputMode="decimal"
+                  min="0"
+                  step="any"
+                  value={rateForm.holiday}
+                  onChange={(e) => setRate("holiday", e.target.value)}
+                  placeholder={String(globalRates.holiday)}
+                  className="mt-1"
+                  aria-label="この請求先の休日単価（円/h）"
+                />
+              </div>
+              <div>
+                <Label className="text-xs text-gray-600">移動係数</Label>
+                <Input
+                  type="number"
+                  inputMode="decimal"
+                  min="0"
+                  step="any"
+                  value={rateForm.travelFactor}
+                  onChange={(e) => setRate("travelFactor", e.target.value)}
+                  placeholder={String(globalRates.travelFactor)}
+                  className="mt-1"
+                  aria-label="この請求先の移動係数"
+                />
+              </div>
+            </div>
+            <p className="text-xs text-gray-400">
+              移動費は「平日単価 × 移動係数」で計算します。1つでも入力すると、残りの空欄には上の共通設定の値が入ります。
+            </p>
           </div>
           {error && (
             <p className="text-sm text-red-600 bg-red-50 rounded p-2">{error}</p>

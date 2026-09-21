@@ -12,7 +12,7 @@ import {
 } from "@/lib/types";
 import {
   DEFAULT_LABOR_RATES,
-  getLaborRates,
+  getLaborRatesForCustomer,
   travelHourlyRate,
   type LaborRates,
 } from "@/lib/laborRates";
@@ -53,10 +53,14 @@ export default function InvoicePreviewStep({
     getActiveEmployees()
       .then(setEmployees)
       .catch(() => setEmployees([]));
-    getLaborRates()
+  }, []);
+
+  // 請求先ごとの単価。請求先が変わったら取り直す
+  useEffect(() => {
+    getLaborRatesForCustomer(basicInfo.customer)
       .then(setRates)
       .catch(() => setRates(DEFAULT_LABOR_RATES));
-  }, []);
+  }, [basicInfo.customer]);
 
   const buildInvoiceLines = (): InvoiceLine[] => {
     const lines: InvoiceLine[] = [];
