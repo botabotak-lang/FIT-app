@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useRef, useState, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Trash2, Printer, Plus, FileSpreadsheet } from "lucide-react";
+import { Trash2, Printer, Plus, FileSpreadsheet, Upload } from "lucide-react";
 import {
   BasicInfo,
   Worker,
@@ -35,6 +35,12 @@ import {
 } from "@/lib/workReportLayout";
 import { confirmReportCapacity, downloadReportWorkbook } from "@/lib/reportWorkbook";
 import { DEFAULT_LINE_LIMIT, overLimitLines, overLimitMessage } from "@/lib/lineWidth";
+import { parseWorkReportWorkbook } from "@/lib/reportImport";
+import { formatImportErrors, mergeBreakBlocks } from "@/lib/reportImportUi";
+
+/** ファイル選択で受け付ける拡張子・MIME（自アプリが出力した .xlsx が前提） */
+const XLSX_ACCEPT =
+  ".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 
 type Props = {
   basicInfo: BasicInfo;
@@ -51,6 +57,9 @@ export default function WorkReportStep({
 }: Props) {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [rates, setRates] = useState<LaborRates>(DEFAULT_LABOR_RATES);
+  const [importing, setImporting] = useState(false);
+  const [importErrors, setImportErrors] = useState<string[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     getActiveEmployees()
@@ -152,6 +161,34 @@ export default function WorkReportStep({
     );
   };
 
+  const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    // 同じファイルをもう一度選べるように、ここで選択をリセットしておく
+    e.target.value = "";
+    if (!file) return;
+    setImporting(true);
+    setImportErrors([]);
+    try {
+      const result = await parseWorkReportWorkbook(await file.arrayBuffer());
+      if (result.errors.length > 0) {
+        setImportErrors(formatImportErrors(result.errors));
+        return;
+      }
+      const ok = window.confirm(
+        `現在の作業データ${workDayEntries.length}件をExcelの内容${result.data.length}件で置き換えます。よろしいですか？`
+      );
+      if (!ok) return;
+      // 休憩はExcelに出力されないので、既存データから同じ日付のものを引き継ぐ
+      onWorkDayEntriesChange(mergeBreakBlocks(workDayEntries, result.data));
+    } catch (err) {
+      setImportErrors([
+        err instanceof Error ? err.message : "読み取れませんでした",
+      ]);
+    } finally {
+      setImporting(false);
+    }
+  };
+
   const handleExportWorkReportExcel = async () => {
     const sorted = sortWorkDayEntries(workDayEntries);
     const payload = { basicInfo, workDayEntries: sorted, materials: [] };
@@ -251,12 +288,46 @@ export default function WorkReportStep({
             <FileSpreadsheet className="w-4 h-4 mr-2" />
             作業報告書をExcel出力
           </Button>
+          <Button
+            variant="outline"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={importing}
+            data-testid="work-report-import"
+          >
+            <Upload className="w-4 h-4 mr-2" />
+            {importing ? "読み込み中…" : "Excelから読み込み"}
+          </Button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept={XLSX_ACCEPT}
+            className="hidden"
+            onChange={handleImportFile}
+            data-testid="work-report-import-file"
+          />
           <Button variant="outline" onClick={handlePrint} disabled={workDayEntries.length === 0}>
             <Printer className="w-4 h-4 mr-2" />
             印刷
           </Button>
         </div>
       </div>
+
+      {importErrors.length > 0 && (
+        <div
+          role="alert"
+          className="bg-red-50 border border-red-200 text-red-700 rounded-lg p-3 text-sm"
+          data-testid="work-report-import-errors"
+        >
+          <p className="font-semibold mb-1">
+            Excelを読み込めませんでした（作業データは変更していません）
+          </p>
+          <ul className="list-disc pl-5 space-y-0.5">
+            {importErrors.map((line, i) => (
+              <li key={`${i}-${line}`}>{line}</li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {workDayEntries.length === 0 && (
         <div className="text-center py-8 text-gray-400 border-2 border-dashed rounded-lg">

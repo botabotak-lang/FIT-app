@@ -1,10 +1,10 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { FileSpreadsheet, X } from "lucide-react";
+import { FileSpreadsheet, Upload, X } from "lucide-react";
 import { BasicInfo, Material, buildSupplierOptions, UNIT_OPTIONS, WorkDayEntry } from "@/lib/types";
 import { Product, getActiveProducts } from "@/lib/productMaster";
 import { getActiveEmployees, Employee } from "@/lib/employeeMaster";
@@ -15,9 +15,15 @@ import {
   type LaborRates,
 } from "@/lib/laborRates";
 import { matchesAllTerms, searchTerms } from "@/lib/searchText";
+import { parseMaterialsWorkbook } from "@/lib/reportImport";
+import { formatImportErrors } from "@/lib/reportImportUi";
 
 /** 候補リストに一度に描画する最大件数（製品マスタが数百〜千件でも重くならないように） */
 const SUGGEST_LIMIT = 50;
+
+/** ファイル選択で受け付ける拡張子・MIME（自アプリが出力した .xlsx が前提） */
+const XLSX_ACCEPT =
+  ".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 
 /** 小数の単価もそのまま見せる（例 25.7円・0.67円） */
 function formatPrice(value: number): string {
@@ -43,6 +49,9 @@ export default function MaterialsStep({ basicInfo, workDayEntries, materials, on
   const [openSuggest, setOpenSuggest] = useState<string | null>(null);
   const [rates, setRates] = useState<LaborRates>(DEFAULT_LABOR_RATES);
   const [searchQuery, setSearchQuery] = useState<{ [key: string]: string }>({});
+  const [importing, setImporting] = useState(false);
+  const [importErrors, setImportErrors] = useState<string[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const saved = localStorage.getItem("productHistory");
@@ -191,6 +200,33 @@ export default function MaterialsStep({ basicInfo, workDayEntries, materials, on
     [masterProducts]
   );
 
+  const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    // 同じファイルをもう一度選べるように、ここで選択をリセットしておく
+    e.target.value = "";
+    if (!file) return;
+    setImporting(true);
+    setImportErrors([]);
+    try {
+      const result = await parseMaterialsWorkbook(await file.arrayBuffer());
+      if (result.errors.length > 0) {
+        setImportErrors(formatImportErrors(result.errors));
+        return;
+      }
+      const ok = window.confirm(
+        `現在の材料データ${materials.length}件をExcelの内容${result.data.length}件で置き換えます。よろしいですか？`
+      );
+      if (!ok) return;
+      onMaterialsChange(result.data);
+    } catch (err) {
+      setImportErrors([
+        err instanceof Error ? err.message : "読み取れませんでした",
+      ]);
+    } finally {
+      setImporting(false);
+    }
+  };
+
   const handleExportMaterialsExcel = async () => {
     const payload = { basicInfo, workDayEntries, materials };
     if (!confirmReportCapacity(payload, "materials", activeWorkerNames)) return;
@@ -216,12 +252,46 @@ export default function MaterialsStep({ basicInfo, workDayEntries, materials, on
             <strong>顧客：</strong>{basicInfo.customer} / <strong>船名：</strong>{basicInfo.shipName}
           </p>
         </div>
-        <div className="mt-3">
+        <div className="mt-3 flex flex-col sm:flex-row gap-2">
           <Button type="button" variant="outline" onClick={handleExportMaterialsExcel}>
             <FileSpreadsheet className="w-4 h-4 mr-2" />
             材料持出表をExcel出力
           </Button>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={importing}
+            data-testid="materials-import"
+          >
+            <Upload className="w-4 h-4 mr-2" />
+            {importing ? "読み込み中…" : "Excelから読み込み"}
+          </Button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept={XLSX_ACCEPT}
+            className="hidden"
+            onChange={handleImportFile}
+            data-testid="materials-import-file"
+          />
         </div>
+        {importErrors.length > 0 && (
+          <div
+            role="alert"
+            className="mt-3 bg-red-50 border border-red-200 text-red-700 rounded-lg p-3 text-sm"
+            data-testid="materials-import-errors"
+          >
+            <p className="font-semibold mb-1">
+              Excelを読み込めませんでした（材料データは変更していません）
+            </p>
+            <ul className="list-disc pl-5 space-y-0.5">
+              {importErrors.map((line, i) => (
+                <li key={`${i}-${line}`}>{line}</li>
+              ))}
+            </ul>
+          </div>
+        )}
       </div>
 
       <div className="space-y-4">
