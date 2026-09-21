@@ -75,7 +75,12 @@ MATERIAL_TOTAL_LAST_COL = "BB"
 # 10pt だと3文字目が枠の高さに収まらず「製造」までしか印刷されない。
 # 結合セルでは Excel の「縮小して全体を表示」が効かないため、フォントサイズを下げる
 MANUFACTURER_LABEL_CELL = "BS5"
-MANUFACTURER_LABEL_FONT_SIZE = 8
+MANUFACTURER_LABEL_FONT_SIZE = 7
+
+# 作業報告書の「作業者」欄。見出し行と全ブロック行が結合セル Q{row}:S{row+3} になっている。
+# 9pt では氏名が枠幅に収まらず印刷で切れるため、見出しも含めて一括で下げる
+WORKER_CELL_FONT_SIZE = 7
+WORKER_MERGED_RANGE = re.compile(r"^Q(\d+):S\d+$")
 
 
 def worker_placeholder(slot):
@@ -158,6 +163,27 @@ def fit_manufacturer_label(ws):
     font = copy(cell.font)
     font.sz = MANUFACTURER_LABEL_FONT_SIZE
     cell.font = font
+
+
+def worker_font_cells(ws):
+    """「作業者」欄（結合セル Q{row}:S{row+3}）の左上セル番地。見出し行と全ブロック行を含む"""
+    rows = sorted(
+        int(WORKER_MERGED_RANGE.match(str(rng)).group(1))
+        for rng in ws.merged_cells.ranges
+        if WORKER_MERGED_RANGE.match(str(rng))
+    )
+    return [f"Q{row}" for row in rows]
+
+
+def fit_worker_cells(ws):
+    """「作業者」欄のフォントサイズだけを一括で下げる（配置は原本のまま）。戻り値は対象セル数"""
+    addresses = worker_font_cells(ws)
+    for address in addresses:
+        cell = ws[address]
+        font = copy(cell.font)
+        font.sz = WORKER_CELL_FONT_SIZE
+        cell.font = font
+    return len(addresses)
 
 
 def clear_materials(ws, first_page):
@@ -320,9 +346,11 @@ def main():
         return 0
     wb = openpyxl.load_workbook(SOURCE)
     worker_names = collect_worker_names(wb)
+    worker_cells = 0
     for i, name in enumerate(WORK_SHEETS):
         clear_work_report(wb[name], i == 0)
         neutralize_worker_names(wb[name], i == 0)
+        worker_cells += fit_worker_cells(wb[name])
     fit_manufacturer_label(wb[WORK_SHEETS[0]])
     for i, name in enumerate(MATERIAL_SHEETS):
         clear_materials(wb[name], i == 0)
@@ -353,6 +381,7 @@ def main():
     wb.save(DEST)
     print(f"created {DEST}")
     print(f"製造者ラベル {MANUFACTURER_LABEL_CELL}: {MANUFACTURER_LABEL_FONT_SIZE}pt（縦書き3文字が枠に収まるサイズ）")
+    print(f"作業者欄 Q列: {worker_cells} セルを {WORKER_CELL_FONT_SIZE}pt（見出し・全ブロック行）")
     print(f"材料持出表 行{MATERIAL_TOTAL_ROW}: 合計行（氏名枠は行3〜8の6枠）")
     print("残存値スキャン: 0 件（明細領域・作業報告書ブロック領域）")
     print(f"氏名スキャン: 0 件（原本の氏名 {len(worker_names)} 名を全シート走査）")

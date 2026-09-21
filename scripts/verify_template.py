@@ -11,6 +11,8 @@ from make_template import (
     MATERIAL_TOTAL_ROW,
     MATERIAL_TOTAL_VALUES,
     MATERIAL_WORKER_ROWS,
+    WORK_SHEETS,
+    WORKER_CELL_FONT_SIZE,
     check_material_sum_formulas,
     collect_worker_names,
     is_formula,
@@ -18,6 +20,7 @@ from make_template import (
     scan_residual_values,
     scan_worker_names,
     total_row_sample_path,
+    worker_font_cells,
 )
 
 
@@ -62,6 +65,23 @@ def check_material_total_row(template):
         assert ws[f"A{row}"].value is None, f"A{row}={ws[f'A{row}'].value!r}"
 
 
+def check_worker_cell_font(template):
+    """作業報告書の「作業者」欄（Q列の結合セル）が全て縮小済みであること"""
+    total = 0
+    for name in WORK_SHEETS:
+        ws = template[name]
+        addresses = worker_font_cells(ws)
+        assert addresses, f"{name} に作業者欄の結合セルが見つかりません"
+        for address in addresses:
+            size = ws[address].font.sz
+            assert size == WORKER_CELL_FONT_SIZE, f"{name}!{address} = {size}pt（期待: {WORKER_CELL_FONT_SIZE}pt）"
+        total += len(addresses)
+    # 見出し「作業者」も本文と同じサイズに揃っていること（1ページ目 Q9・2ページ目以降 Q2）
+    assert template[WORK_SHEETS[0]]["Q9"].value == "作業者", template[WORK_SHEETS[0]]["Q9"].value
+    assert template[WORK_SHEETS[1]]["Q2"].value == "作業者", template[WORK_SHEETS[1]]["Q2"].value
+    return total
+
+
 def main():
     original = openpyxl.load_workbook(ORIGINAL, data_only=False)
     template = openpyxl.load_workbook(TEMPLATE, data_only=False)
@@ -97,7 +117,7 @@ def main():
                 value = ws[f"{col}{row}"].value
                 assert is_formula(value), f"{name}!{col}{row} が数式ではありません: {value!r}"
 
-    # 「製造者」ラベル（縦書きの結合セル BS5:BT8）は10ptだと3文字目が切れるため8pt。配置は原本のまま
+    # 「製造者」ラベル（縦書きの結合セル BS5:BT8）は10ptだと3文字目が切れるため縮小。配置は原本のまま
     label = template["作業報告書"][MANUFACTURER_LABEL_CELL]
     original_label = original["作業報告書"][MANUFACTURER_LABEL_CELL]
     assert label.value == "製造者", label.value
@@ -105,6 +125,9 @@ def main():
     assert label.alignment.textRotation == original_label.alignment.textRotation == 255, label.alignment.textRotation
     assert label.alignment.horizontal == original_label.alignment.horizontal, label.alignment.horizontal
     assert label.alignment.wrapText == original_label.alignment.wrapText, label.alignment.wrapText
+
+    # 「作業者」欄（Q列の結合セル）は見出し・全ブロック行とも縮小済み
+    worker_cells = check_worker_cell_font(template)
 
     # 材料持出表1ページ目の行9＝工賃「合計」行（見本ファイルと一致）
     check_material_total_row(template)
@@ -125,6 +148,7 @@ def main():
 
     print("verify_template.py: OK")
     print(f"  製造者ラベル {MANUFACTURER_LABEL_CELL}: {label.font.sz}pt（縦書き・配置は原本のまま）")
+    print(f"  作業者欄 Q列: {worker_cells} セルが {WORKER_CELL_FONT_SIZE}pt（見出し・全ブロック行）")
     print(f"  材料持出表 行{MATERIAL_TOTAL_ROW}: 合計行（見本ファイルと書式・数式が一致）")
     print("  材料持出表系シートの明細行 AJ/AS: 全て数式")
     print("  明細領域・作業報告書ブロック領域の残存値: 0 件")

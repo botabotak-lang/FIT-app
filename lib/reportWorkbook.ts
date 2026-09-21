@@ -203,14 +203,16 @@ function writeWorkerFormulas(wb: ExcelJS.Workbook, names: string[]): void {
 
 /**
  * 材料持出表の作業者別集計。
- * hoursByWorker を渡した場合（材料持出表の単体出力）は、作業報告書シートを
- * 参照する 3D 数式が #REF! になるため、集計済みの時間値を直接書き込む。
+ * 時間（G/S/Y/AK列）は出力種別によらず sumHoursByWorker() の集計値を直接書き込む。
+ * 作業報告書シートを参照する 3D 数式は、材料持出表の単体出力では #REF! になるうえ、
+ * 帳票一式でも Excel で開くまで値が入らず単体出力と数字が食い違うため使わない。
+ * 工賃（M/AE/AO列）は値セルを参照するだけなので数式のままでよい。
  */
 function writeMaterialWorkerFormulas(
   wb: ExcelJS.Workbook,
   names: string[],
   rates: LaborRates,
-  hoursByWorker: Map<string, WorkerHours> | null
+  hoursByWorker: Map<string, WorkerHours>
 ): void {
   const ws = wb.getWorksheet("材料持出表");
   if (!ws) return;
@@ -228,19 +230,11 @@ function writeMaterialWorkerFormulas(
       for (const col of ["G", "S", "Y", "AK", "M", "AE", "AO"]) ws.getCell(`${col}${row}`).value = null;
       continue;
     }
-    const valueCol = workerValueCol(i);
-    if (hoursByWorker) {
-      const h = hoursByWorker.get(name) ?? { travel: 0, regular: 0, overtime: 0, holiday: 0 };
-      ws.getCell(`G${row}`).value = hoursToExcelTime(h.regular);
-      ws.getCell(`S${row}`).value = hoursToExcelTime(h.overtime);
-      ws.getCell(`Y${row}`).value = hoursToExcelTime(h.holiday);
-      ws.getCell(`AK${row}`).value = hoursToExcelTime(h.travel);
-    } else {
-      setFormula(ws.getCell(`G${row}`), `SUM('作業報告書:作業報告書 (END)'!${valueCol}139)`);
-      setFormula(ws.getCell(`S${row}`), `SUM('作業報告書:作業報告書 (END)'!${valueCol}140)`);
-      setFormula(ws.getCell(`Y${row}`), `SUM('作業報告書:作業報告書 (END)'!${valueCol}141)`);
-      setFormula(ws.getCell(`AK${row}`), `SUM('作業報告書:作業報告書 (END)'!${valueCol}138)`);
-    }
+    const h = hoursByWorker.get(name) ?? { travel: 0, regular: 0, overtime: 0, holiday: 0 };
+    ws.getCell(`G${row}`).value = hoursToExcelTime(h.regular);
+    ws.getCell(`S${row}`).value = hoursToExcelTime(h.overtime);
+    ws.getCell(`Y${row}`).value = hoursToExcelTime(h.holiday);
+    ws.getCell(`AK${row}`).value = hoursToExcelTime(h.travel);
     setFormula(ws.getCell(`M${row}`), `(G${row}*24)*${rates.regular}`);
     setFormula(ws.getCell(`AE${row}`), `(S${row}*24+Y${row}*24)*${rates.holiday}`);
     setFormula(ws.getCell(`AO${row}`), `(AK${row}*24)*${travelHourlyRate(rates)}`);
@@ -358,6 +352,15 @@ function hideZeroValues(wb: ExcelJS.Workbook): void {
   }
 }
 
+/**
+ * 開いたときに全再計算させる（workbook.xml の <calcPr fullCalcOnLoad="1"/>）。
+ * ExcelJS は数式の計算結果をキャッシュしないため、これが無いと
+ * 工賃・合計のセルが Excel の再計算設定によっては空のまま表示されることがある。
+ */
+function enableFullCalcOnLoad(wb: ExcelJS.Workbook): void {
+  wb.calcProperties = { ...wb.calcProperties, fullCalcOnLoad: true };
+}
+
 export async function createReportWorkbook(
   templateBuffer: ArrayBuffer,
   shipCase: Pick<ShipCase, "basicInfo" | "workDayEntries" | "materials">,
@@ -371,15 +374,11 @@ export async function createReportWorkbook(
   writeWorkReport(wb, shipCase.basicInfo, shipCase.workDayEntries);
   writeWorkerFormulas(wb, names);
   writeMaterials(wb, shipCase.basicInfo, shipCase.workDayEntries, shipCase.materials);
-  // 材料持出表の単体出力は作業報告書シートを削除するため、3D参照ではなく集計値を書く
-  writeMaterialWorkerFormulas(
-    wb,
-    names,
-    rates,
-    kind === "materials" ? sumHoursByWorker(shipCase.workDayEntries) : null
-  );
+  // 工賃集計は出力種別によらず同じ計算値を書く（帳票一式と材料持出表単体で数字を一致させる）
+  writeMaterialWorkerFormulas(wb, names, rates, sumHoursByWorker(shipCase.workDayEntries));
   removeUnneededSheets(wb, kind);
   hideZeroValues(wb);
+  enableFullCalcOnLoad(wb);
   return wb;
 }
 

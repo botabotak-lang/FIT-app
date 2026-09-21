@@ -1,5 +1,6 @@
 import datetime
 import re
+import zipfile
 from pathlib import Path
 
 import openpyxl
@@ -39,6 +40,12 @@ MATERIAL_TOTAL_VALUES = {
 # 作業者の氏名が入り得る行（6枠）のうち、社員4名のサンプルで空欄になる行
 EMPTY_WORKER_ROWS = (7, 8)
 WORKER_COLS = ("A", "G", "S", "Y", "AK", "M", "AE", "AO")
+
+# 帳票の「作業者」欄（Q列の結合セル）と縦書きラベル「製造者」（BS5）のフォントサイズ
+WORKER_CELL_FONT_SIZE = 7
+MANUFACTURER_LABEL_FONT_SIZE = 7
+# 開いたときに全再計算させる指定（workbook.xml の calcPr）
+CALC_PR = re.compile(r"<calcPr[^>]*\bfullCalcOnLoad=\"1\"")
 
 
 def is_formula(value):
@@ -88,6 +95,13 @@ def check_worker_row_capacity():
     return int(m.group(1))
 
 
+def check_full_calc_on_load(path):
+    """開いたとき全再計算（<calcPr fullCalcOnLoad="1"/>）が付いていること"""
+    with zipfile.ZipFile(path) as z:
+        xml = z.read("xl/workbook.xml").decode("utf-8")
+    assert CALC_PR.search(xml), f"{path.name}: workbook.xml に fullCalcOnLoad=\"1\" がありません"
+
+
 def to_hours(value):
     """h:mm 書式のセルは timedelta / time で返るので時間数に直す"""
     if isinstance(value, datetime.timedelta):
@@ -109,10 +123,14 @@ def check_all():
     assert ws["BB5"].value == "TEST-100"
     # 製造者の値セルは BU5（BS5:BT8 はラベル）
     assert ws["BU5"].value == "サンプル電機", ws["BU5"].value
-    # 縦書きラベル「製造者」は8pt（10ptだと3文字目が印刷で切れる）
+    # 縦書きラベル「製造者」は7pt（10ptだと3文字目が印刷で切れる）
     assert ws["BS5"].value == "製造者", ws["BS5"].value
-    assert ws["BS5"].font.sz == 8, ws["BS5"].font.sz
+    assert ws["BS5"].font.sz == MANUFACTURER_LABEL_FONT_SIZE, ws["BS5"].font.sz
     assert ws["BS5"].alignment.textRotation == 255, ws["BS5"].alignment.textRotation
+    # 「作業者」欄は見出し（Q9）・本文（Q11）とも7pt。ExcelJS の round-trip 後も残ること
+    assert ws["Q9"].value == "作業者", ws["Q9"].value
+    assert ws["Q9"].font.sz == WORKER_CELL_FONT_SIZE, ws["Q9"].font.sz
+    assert ws["Q11"].font.sz == WORKER_CELL_FONT_SIZE, ws["Q11"].font.sz
 
     # 作業報告書：1ブロック目（移動 8:00〜9:00）と作業内容の1行目
     assert ws["B11"].value is not None
@@ -136,7 +154,7 @@ def check_all():
         assert page["CF2"].value == "所要時間　作業者A", f"{name}!CF2={page['CF2'].value}"
         assert page["CF69"].value == "所要時間　作業者A", f"{name}!CF69={page['CF69'].value}"
 
-    # 材料持出表（1ブック統合）：作業者集計は3D参照の数式のまま
+    # 材料持出表（1ブック統合）：作業者集計は3D参照ではなく計算値（単体出力と同じ数字）
     assert mat["D1"].value == "第一テスト丸"
     assert mat["S1"].value == "サンプル工事"
     assert mat["AH1"].value == "TEST-100"
@@ -144,7 +162,9 @@ def check_all():
     assert to_date_serial(mat["AX1"].value) == COMPLETION_SERIAL, mat["AX1"].value
     assert mat["A3"].value == "作業者A"
     assert mat["A6"].value == "作業者D"
-    assert mat["G3"].value == "=SUM('作業報告書:作業報告書 (END)'!CJ139)", mat["G3"].value
+    # 工賃集計の時間セルは数式ではなく計算値（帳票一式でも材料持出表単体と同じコードパス）
+    for cell in ("G3", "S3", "Y3", "AK3"):
+        assert not is_formula(mat[cell].value), f"帳票一式!{cell} が数式のままです: {mat[cell].value!r}"
     # 社員は4名なので氏名枠の残り（行7〜8）は空欄（0を印字しない）
     for row in EMPTY_WORKER_ROWS:
         for col in WORKER_COLS:
@@ -256,10 +276,22 @@ def main():
     mat_only = check_materials_only()
     six = check_six_workers()
     slots = check_worker_row_capacity()
+    # 帳票一式と材料持出表単体で工賃集計の時間が一致すること
+    for row in range(3, 3 + MATERIAL_WORKER_ROWS):
+        for col in ("G", "S", "Y", "AK"):
+            cell = f"{col}{row}"
+            assert mat[cell].value == mat_only[cell].value, (
+                f"{cell}: 帳票一式={mat[cell].value!r} / 材料持出表単体={mat_only[cell].value!r}"
+            )
+    # 出力3種とも開いたときに全再計算する
+    for path in (OUTPUT, MATERIALS_ONLY, SIX_WORKERS):
+        check_full_calc_on_load(path)
     print("verify_output.py: OK")
     print(f"BU2={ws['BU2'].value} BU5={ws['BU5'].value} BS5={ws['BS5'].value}({ws['BS5'].font.sz}pt) W11={ws['W11'].value}")
+    print(f"作業者欄 Q9={ws['Q9'].value}({ws['Q9'].font.sz}pt) Q11={ws['Q11'].value}({ws['Q11'].font.sz}pt)")
     print(f"材料持出表(統合) A3={mat['A3'].value} G3={mat['G3'].value} A8={mat['A8'].value!r} A9={mat['A9'].value!r} G9={mat['G9'].value!r}")
     print(f"材料持出表(単体) G3={mat_only['G3'].value} S3={mat_only['S3'].value} G5={mat_only['G5'].value} G9={mat_only['G9'].value}")
+    print("工賃集計 G/S/Y/AK 行3〜8: 帳票一式と材料持出表単体が一致 / 出力3種とも fullCalcOnLoad=1")
     print(f"完成月日 AX1={mat['AX1'].value} 合計 AJ25={mat['AJ25'].value} AS25={mat['AS25'].value}")
     print(f"6名レンダー ED9={six['ED9'].value} EH11={six['EH11'].value}")
     print(f"氏名枠 {slots}枠（{slots + 1}名以上で容量警告） / 出力3種の全シート showZeros=False")
