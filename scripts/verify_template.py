@@ -12,11 +12,16 @@ from make_template import (
     MATERIAL_TOTAL_VALUES,
     MATERIAL_WORKER_ROWS,
     WORK_SHEETS,
+    PLACE_COLUMN,
+    PLACE_FONT_SIZE,
+    WEEKDAY_HEADER_COLUMNS,
     WORKER_CELL_FONT_SIZE,
     check_material_sum_formulas,
+    column_header_rows,
     collect_worker_names,
     is_formula,
     material_detail_rows,
+    work_report_block_starts,
     scan_residual_values,
     scan_worker_names,
     total_row_sample_path,
@@ -66,7 +71,7 @@ def check_material_total_row(template):
 
 
 def check_worker_cell_font(template):
-    """作業報告書の「作業者」欄（Q列の結合セル）が全て縮小済みであること"""
+    """作業報告書の「作業者」欄（Q列の結合セル）が全て「場所」と同じサイズであること"""
     total = 0
     for name in WORK_SHEETS:
         ws = template[name]
@@ -79,6 +84,21 @@ def check_worker_cell_font(template):
     # 見出し「作業者」も本文と同じサイズに揃っていること（1ページ目 Q9・2ページ目以降 Q2）
     assert template[WORK_SHEETS[0]]["Q9"].value == "作業者", template[WORK_SHEETS[0]]["Q9"].value
     assert template[WORK_SHEETS[1]]["Q2"].value == "作業者", template[WORK_SHEETS[1]]["Q2"].value
+    return total
+
+
+def check_place_sized_cells(template):
+    """「作業内/作業外(平日)」見出しと「場所」の見出し・値セルが全て「場所」と同じサイズであること"""
+    total = 0
+    for i, name in enumerate(WORK_SHEETS):
+        ws = template[name]
+        rows = column_header_rows(i == 0)
+        addresses = [f"{col}{row}" for row in rows for col in (*WEEKDAY_HEADER_COLUMNS, PLACE_COLUMN)]
+        addresses += [f"{PLACE_COLUMN}{row}" for row in work_report_block_starts(i == 0)]
+        for address in addresses:
+            size = ws[address].font.sz
+            assert size == PLACE_FONT_SIZE, f"{name}!{address} = {size}pt（期待: {PLACE_FONT_SIZE}pt）"
+        total += len(addresses)
     return total
 
 
@@ -126,8 +146,9 @@ def main():
     assert label.alignment.horizontal == original_label.alignment.horizontal, label.alignment.horizontal
     assert label.alignment.wrapText == original_label.alignment.wrapText, label.alignment.wrapText
 
-    # 「作業者」欄（Q列の結合セル）は見出し・全ブロック行とも縮小済み
+    # 「作業者」欄（Q列の結合セル）・作業内/作業外(平日)・場所は見出し・全ブロック行とも「場所」と同じサイズ
     worker_cells = check_worker_cell_font(template)
+    place_cells = check_place_sized_cells(template)
 
     # 材料持出表1ページ目の行9＝工賃「合計」行（見本ファイルと一致）
     check_material_total_row(template)
@@ -149,6 +170,7 @@ def main():
     print("verify_template.py: OK")
     print(f"  製造者ラベル {MANUFACTURER_LABEL_CELL}: {label.font.sz}pt（縦書き・配置は原本のまま）")
     print(f"  作業者欄 Q列: {worker_cells} セルが {WORKER_CELL_FONT_SIZE}pt（見出し・全ブロック行）")
+    print(f"  作業内/作業外(平日)・場所 H/K/T列: {place_cells} セルが {PLACE_FONT_SIZE}pt")
     print(f"  材料持出表 行{MATERIAL_TOTAL_ROW}: 合計行（見本ファイルと書式・数式が一致）")
     print("  材料持出表系シートの明細行 AJ/AS: 全て数式")
     print("  明細領域・作業報告書ブロック領域の残存値: 0 件")

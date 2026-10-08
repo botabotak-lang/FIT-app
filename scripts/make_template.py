@@ -78,8 +78,14 @@ MANUFACTURER_LABEL_CELL = "BS5"
 MANUFACTURER_LABEL_FONT_SIZE = 7
 
 # 作業報告書の「作業者」欄。見出し行と全ブロック行が結合セル Q{row}:S{row+3} になっている。
-# 9pt では氏名が枠幅に収まらず印刷で切れるため、見出しも含めて一括で下げる
-WORKER_CELL_FONT_SIZE = 7
+# 2026/09/21 に 7pt へ下げたが、2026/10/08 FIT要望で右隣「場所」（9pt）と同じサイズに戻した
+PLACE_FONT_SIZE = 9
+WORKER_CELL_FONT_SIZE = PLACE_FONT_SIZE
+
+# 明細の列見出し行（上段・下段）。原本は「作業内/作業外(平日)」10pt・「場所」の値セルに1か所8ptがあり、
+# 「場所」に揃える（2026/10/08 FIT要望）
+WEEKDAY_HEADER_COLUMNS = ("H", "K")
+PLACE_COLUMN = "T"
 WORKER_MERGED_RANGE = re.compile(r"^Q(\d+):S\d+$")
 
 
@@ -176,12 +182,28 @@ def worker_font_cells(ws):
 
 
 def fit_worker_cells(ws):
-    """「作業者」欄のフォントサイズだけを一括で下げる（配置は原本のまま）。戻り値は対象セル数"""
+    """「作業者」欄のフォントサイズだけを「場所」と同じサイズに揃える（配置は原本のまま）。戻り値は対象セル数"""
     addresses = worker_font_cells(ws)
     for address in addresses:
         cell = ws[address]
         font = copy(cell.font)
         font.sz = WORKER_CELL_FONT_SIZE
+        cell.font = font
+    return len(addresses)
+
+
+def column_header_rows(first_page):
+    return [9, 68] if first_page else [2, 69]
+
+
+def fit_place_sized_cells(ws, first_page):
+    """「作業内/作業外(平日)」見出しと「場所」の値セルを「場所」見出しと同じサイズにする。戻り値は対象セル数"""
+    addresses = [f"{col}{row}" for row in column_header_rows(first_page) for col in WEEKDAY_HEADER_COLUMNS]
+    addresses += [f"{PLACE_COLUMN}{row}" for row in work_report_block_starts(first_page)]
+    for address in addresses:
+        cell = ws[address]
+        font = copy(cell.font)
+        font.sz = PLACE_FONT_SIZE
         cell.font = font
     return len(addresses)
 
@@ -347,10 +369,12 @@ def main():
     wb = openpyxl.load_workbook(SOURCE)
     worker_names = collect_worker_names(wb)
     worker_cells = 0
+    place_cells = 0
     for i, name in enumerate(WORK_SHEETS):
         clear_work_report(wb[name], i == 0)
         neutralize_worker_names(wb[name], i == 0)
         worker_cells += fit_worker_cells(wb[name])
+        place_cells += fit_place_sized_cells(wb[name], i == 0)
     fit_manufacturer_label(wb[WORK_SHEETS[0]])
     for i, name in enumerate(MATERIAL_SHEETS):
         clear_materials(wb[name], i == 0)
@@ -382,6 +406,7 @@ def main():
     print(f"created {DEST}")
     print(f"製造者ラベル {MANUFACTURER_LABEL_CELL}: {MANUFACTURER_LABEL_FONT_SIZE}pt（縦書き3文字が枠に収まるサイズ）")
     print(f"作業者欄 Q列: {worker_cells} セルを {WORKER_CELL_FONT_SIZE}pt（見出し・全ブロック行）")
+    print(f"作業内/作業外(平日)見出し・場所の値セル: {place_cells} セルを {PLACE_FONT_SIZE}pt")
     print(f"材料持出表 行{MATERIAL_TOTAL_ROW}: 合計行（氏名枠は行3〜8の6枠）")
     print("残存値スキャン: 0 件（明細領域・作業報告書ブロック領域）")
     print(f"氏名スキャン: 0 件（原本の氏名 {len(worker_names)} 名を全シート走査）")

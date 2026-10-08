@@ -41,8 +41,10 @@ MATERIAL_TOTAL_VALUES = {
 EMPTY_WORKER_ROWS = (7, 8)
 WORKER_COLS = ("A", "G", "S", "Y", "AK", "M", "AE", "AO")
 
-# 帳票の「作業者」欄（Q列の結合セル）と縦書きラベル「製造者」（BS5）のフォントサイズ
-WORKER_CELL_FONT_SIZE = 7
+# 帳票の「作業者」欄（Q列の結合セル）と縦書きラベル「製造者」（BS5）のフォントサイズ。
+# 作業者・作業内/作業外(平日)は「場所」（9pt）に揃える（2026/10/08 FIT要望）
+PLACE_FONT_SIZE = 9
+WORKER_CELL_FONT_SIZE = PLACE_FONT_SIZE
 MANUFACTURER_LABEL_FONT_SIZE = 7
 # 開いたときに全再計算させる指定（workbook.xml の calcPr）
 CALC_PR = re.compile(r"<calcPr[^>]*\bfullCalcOnLoad=\"1\"")
@@ -127,10 +129,13 @@ def check_all():
     assert ws["BS5"].value == "製造者", ws["BS5"].value
     assert ws["BS5"].font.sz == MANUFACTURER_LABEL_FONT_SIZE, ws["BS5"].font.sz
     assert ws["BS5"].alignment.textRotation == 255, ws["BS5"].alignment.textRotation
-    # 「作業者」欄は見出し（Q9）・本文（Q11）とも7pt。ExcelJS の round-trip 後も残ること
+    # 「作業者」欄（見出しQ9・本文Q11）と「作業内/作業外(平日)」見出しは「場所」と同じ9pt。
+    # ExcelJS の round-trip 後も残ること
     assert ws["Q9"].value == "作業者", ws["Q9"].value
     assert ws["Q9"].font.sz == WORKER_CELL_FONT_SIZE, ws["Q9"].font.sz
     assert ws["Q11"].font.sz == WORKER_CELL_FONT_SIZE, ws["Q11"].font.sz
+    for address in ("H9", "K9", "T9", "T11"):
+        assert ws[address].font.sz == PLACE_FONT_SIZE, (address, ws[address].font.sz)
 
     # 作業報告書：1ブロック目（移動 8:00〜9:00）と作業内容の1行目
     assert ws["B11"].value is not None
